@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Product QR Code | POS Workspace')
+@section('title', 'Product QR Code | QuickScanPos')
 
 @section('content')
     <section class="product-qr">

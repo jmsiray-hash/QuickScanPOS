@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Customer Details | POS Workspace')
+@section('title', 'Customer Details | QuickScanPos')
 
 @section('content')
     <div class="page-actions">

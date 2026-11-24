@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'About | POS Workspace')
+@section('title', 'About | QuickScanPos')
 
 @section('content')
     <section class="page-heading">

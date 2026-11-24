@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Create Customer | POS Workspace')
+@section('title', 'Create Customer | QuickScanPos')
 
 @section('content')
     <h2>Create Customer</h2>

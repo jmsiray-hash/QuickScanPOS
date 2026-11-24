@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Verify Cart Items | POS Workspace')
+@section('title', 'Verify Cart Items | QuickScanPos')
 
 @section('content')
     <section class="verify-page">

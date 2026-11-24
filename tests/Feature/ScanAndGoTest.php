@@ -18,6 +18,26 @@ class ScanAndGoTest extends TestCase
         $this->actingAs(User::factory()->create());
     }
 
+    public function test_quickpos_home_and_dashboard_link_to_store_workflows(): void
+    {
+        $this->get(route('home'))
+            ->assertOk()
+            ->assertSee('QuickScanPos')
+            ->assertSee('Open POS Checkout')
+            ->assertSee(route('pos.index'), false)
+            ->assertSee(route('products.create'), false)
+            ->assertSee(route('shop.entry'), false);
+
+        $this->get(route('dashboard'))
+            ->assertOk()
+            ->assertSee('POS Checkout')
+            ->assertSee(route('products.create'), false)
+            ->assertSee(route('products.index'), false)
+            ->assertSee(route('pos.store-qr'), false)
+            ->assertSee(route('customers.index'), false)
+            ->assertSee(route('users.index'), false);
+    }
+
     public function test_customer_and_cashier_scanning_pages_render(): void
     {
         $this->get(route('shop.entry'))

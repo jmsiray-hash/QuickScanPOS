@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Phone Product Scanner | POS Workspace')
+@section('title', 'Phone Product Scanner | QuickScanPos')
 
 @section('content')
     <section class="phone-scan-page">

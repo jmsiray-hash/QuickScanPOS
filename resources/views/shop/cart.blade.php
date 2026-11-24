@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Your Shopping Cart | POS Workspace')
+@section('title', 'Your Shopping Cart | QuickScanPos')
 
 @section('content')
     <section class="shop-cart">

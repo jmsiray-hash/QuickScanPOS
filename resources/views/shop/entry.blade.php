@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Start Shopping | POS Workspace')
+@section('title', 'Start Shopping | QuickScanPos')
 
 @section('content')
     <section class="shop-panel">

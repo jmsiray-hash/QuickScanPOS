@@ -3,10 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>POS Workspace</title>
+    <title>QuickScanPos</title>
 </head>
 <body>
-    <h1>POS Workspace</h1>
+    <h1>QuickScanPos</h1>
     <p>Welcome to the Laravel POS application.</p>
     @auth
         <a href="{{ route('customers.index') }}">Manage Customers</a>
