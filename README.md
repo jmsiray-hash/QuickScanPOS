@@ -74,6 +74,12 @@ andres@example.com
 gregoria@example.com
 ```
 
+## Render with Aiven MySQL
+
+Set `DB_CONNECTION=mysql` and use the host, port, database name, username, and password shown in the Aiven service connection details. Do not assume port `3306`; use the port Aiven provides. The Docker entrypoint runs `php artisan migrate --force` before Apache starts, so a failed database connection or migration prevents the container from starting.
+
+If Aiven requires its CA certificate, add the certificate in Render as a Secret File and set `MYSQL_ATTR_SSL_CA` to that file's path (for example, `/etc/secrets/aiven-ca.pem`). Server certificate verification is enabled when a CA path is provided; `MYSQL_ATTR_SSL_VERIFY_SERVER_CERT` can explicitly override that behavior. Do not put database credentials or CA certificates in the repository.
+
 ## Storage Setup
 
 ```sh

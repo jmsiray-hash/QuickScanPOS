@@ -2,6 +2,12 @@
 
 use Illuminate\Support\Str;
 
+$mysqlSslCa = env('MYSQL_ATTR_SSL_CA');
+$mysqlSslVerifyServerCert = env('MYSQL_ATTR_SSL_VERIFY_SERVER_CERT');
+if ($mysqlSslVerifyServerCert === null || $mysqlSslVerifyServerCert === '') {
+    $mysqlSslVerifyServerCert = $mysqlSslCa ? true : null;
+}
+
 return [
     'default' => env('DB_CONNECTION', 'mysql'),
     'connections' => [
@@ -32,8 +38,9 @@ return [
             'strict' => true,
             'engine' => null,
             'options' => extension_loaded('pdo_mysql') ? array_filter([
-                PDO::MYSQL_ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
-            ]) : [],
+                PDO::MYSQL_ATTR_SSL_CA => $mysqlSslCa ?: null,
+                PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT => $mysqlSslVerifyServerCert,
+            ], static fn ($value): bool => $value !== null && $value !== '') : [],
         ],
     ],
     'migrations' => [
