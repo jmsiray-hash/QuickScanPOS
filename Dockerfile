@@ -18,15 +18,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && a2enmod rewrite \
     && rm -rf /var/lib/apt/lists/*
 
-ENV APACHE_DOCUMENT_ROOT=/var/www/html/public
-RUN sed -ri 's!/var/www/html!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/sites-available/*.conf \
-    && sed -ri 's!/var/www/html!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/conf-available/*.conf
-
 WORKDIR /var/www/html
 
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 COPY . .
 COPY --from=frontend /app/public/build ./public/build
+COPY apache-vhost.conf /etc/apache2/sites-available/000-default.conf
 
 RUN composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist \
     && mkdir -p storage/framework/cache/data storage/framework/sessions storage/framework/views storage/logs bootstrap/cache \
