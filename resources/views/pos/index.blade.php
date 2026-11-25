@@ -19,7 +19,7 @@
         </div>
     </div>
 
-    <p class="cashier-flow-hint">Scan the customer's final QR here to load their items. The same QR can also be scanned by the cashier phone to open item checking. Use <strong>Connect Cashier Phone</strong> to create a fresh QR if needed. It works online over HTTPS; no Bluetooth pairing is needed.</p>
+    <p class="cashier-flow-hint">Scan the customer's final checkout QR to load their items. You can proceed to checkout immediately; cashier-phone item verification is optional and can be used as an extra check when needed. Use <strong>Connect Cashier Phone</strong> to create a verification QR. It works online over HTTPS; no Bluetooth pairing is needed.</p>
 
     <section class="customer-discount-panel">
         <h3>Customer &amp; Discounts</h3>
@@ -48,9 +48,9 @@
     <div id="cart-summary"></div>
     <section id="verification-panel" class="verification-panel" hidden>
         <h3>Cashier Phone Item Check</h3>
-        <p>Open the phone camera and scan this QR. The phone will show the expected items and let the cashier scan each physical item before payment.</p>
+        <p>Optional item check: open the cashier phone camera and scan this QR to compare the physical items with the customer's cart.</p>
         <div id="verification-qr"></div>
-        <p class="field-hint">Keep this cashier page open. The checkout status updates when every expected piece is checked.</p>
+        <p class="field-hint">You may complete checkout without this check. If you choose to verify, this page shows when all expected pieces are checked.</p>
         <p id="verification-link"></p>
         <div id="verification-badge" class="verified-banner" hidden>SCANNED AND CHECKED ITEM - READY FOR PAYMENT</div>
     </section>
@@ -86,14 +86,12 @@
             })[char]);
             function updatePaymentState() {
                 const button = document.getElementById('checkout');
-                button.textContent = currentCartToken && !isVerified
-                    ? 'Verify Items Before Checkout'
-                    : isVerified
-                    ? 'Complete Checkout - Verified'
+                button.textContent = isVerified
+                    ? 'Complete Checkout - Phone Check Complete'
                     : 'Complete Checkout';
-                button.disabled = Boolean(currentCartToken && !isVerified);
+                button.disabled = false;
                 button.classList.toggle('payment-ready', isVerified);
-                button.classList.toggle('payment-warning', Boolean(currentCartToken && !isVerified));
+                button.classList.remove('payment-warning');
             }
             function show(message, isError = false) {
                 toast.textContent = message;
@@ -491,10 +489,6 @@
                 }
             });
             document.getElementById('checkout').addEventListener('click', async () => {
-                if (currentCartToken && !isVerified) {
-                    show('Scan and verify every item with the cashier phone before checkout.', true);
-                    return;
-                }
                 try {
                     const result = await request('{{ route('pos.checkout') }}', 'POST');
                     currentCartToken = null;

@@ -337,9 +337,6 @@ class PosController extends Controller
                         abort(422, 'The customer cart is no longer available for checkout.');
                     }
 
-                    if ($customerCart->status !== 'verified_ready' || ! $customerCart->is_verified) {
-                        abort(422, 'Scan and verify every item with the cashier phone before checkout.');
-                    }
                 }
 
                 $customerId = $customerCart?->customer_id ?? session('pos_customer_id');

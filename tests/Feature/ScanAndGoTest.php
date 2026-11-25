@@ -492,7 +492,7 @@ class ScanAndGoTest extends TestCase
             ->assertJsonPath('cart.items.0.barcode', $product->barcode);
     }
 
-    public function test_customer_cart_checkout_requires_mobile_item_verification(): void
+    public function test_customer_cart_checkout_can_proceed_without_mobile_item_verification(): void
     {
         $product = $this->product('MANUAL-PAYMENT-1', 4, 6.00);
         $cart = CustomerCart::create([
@@ -510,11 +510,14 @@ class ScanAndGoTest extends TestCase
 
         $this->getJson(route('pos.import-cart', $cart->token))->assertOk();
         $this->postJson(route('pos.checkout'))
-            ->assertUnprocessable()
-            ->assertJsonPath('message', 'Scan and verify every item with the cashier phone before checkout.');
+            ->assertOk()
+            ->assertJsonPath('message', 'Checkout completed.');
 
-        $this->assertSame('ready_for_checkout', $cart->fresh()->status);
-        $this->assertSame(4, $product->fresh()->stock_quantity);
+        $this->assertSame('paid', $cart->fresh()->status);
+        $this->assertSame(3, $product->fresh()->stock_quantity);
+        $sale = \App\Models\Sale::query()->where('customer_name', 'Manual Override')->latest('id')->firstOrFail();
+        $this->assertEquals(6.00, (float) $sale->total);
+        $this->assertSame(1, $sale->items()->count());
     }
 
     public function test_cashier_cart_edits_reset_mobile_verification_before_payment(): void

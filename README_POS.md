@@ -69,22 +69,22 @@ Shopping carts expire after two hours. Account-linked carts require that custome
 
 ## Cashier Import, Verification, and Payment
 
-1. At `/pos`, scan the customer's final QR with the cashier screen camera or enter its `CART-...` code. The POS loads that cart without adding a sale and automatically displays the phone-check QR.
+1. At `/pos`, scan the customer's final QR with the cashier screen camera or enter its `CART-...` code. The POS loads that cart without adding a sale. You can proceed to checkout immediately, which is useful when checkout lines are long.
 2. Search by customer name, email, or phone to select a customer for a direct POS sale. The POS shows the customer's recorded PWD/Senior ID, store-discount reminder, monthly store-discount quota used, and remaining amount. Scan & Go customers are linked automatically.
 3. Before payment, the cashier may edit quantities, remove items, or scan additional products in the POS cart. Any item/quantity change resets item checks.
 4. Choose a discount type and enter its percentage on each eligible item; discounts are never applied automatically. Store/loyalty discounts are capped by the customer's remaining monthly quota (default ₱0 until staff configures it). PWD/Senior discounts require a matching ID on the customer record and are tracked separately from the store quota.
-5. Scan the displayed verification QR with the cashier's phone; it opens the online item-check screen. **Connect Cashier Phone** can regenerate it when needed.
+5. Optional queue/item check: scan the displayed verification QR with the cashier's phone, or use **Connect Cashier Phone** to create one. It opens the online item-check screen so a cashier can verify the physical items in a long queue before payment.
 6. On the phone, scan each physical item's barcode, use OCR for a printed number, enter a code manually, or tap **Check one**. Unknown, unexpected, and over-quantity scans show a mismatch warning. The phone refreshes its expected items when the cashier edits the cart.
-7. Once every expected piece is checked, the mobile page and cashier POS show **SCANNED AND CHECKED ITEM - READY FOR PAYMENT**. The cashier POS polls for this state, and checkout stays disabled until verification is complete.
+7. If you use the phone check, once every expected piece is checked the mobile page and cashier POS show **SCANNED AND CHECKED ITEM - READY FOR PAYMENT**. The cashier POS polls for this state, but checkout remains available even when the check is not used.
 8. Tap **Complete Checkout**. Successful payment records the customer and per-item discount snapshots, deducts stock, and marks the customer cart `paid` in the same database transaction. Customer records show their completed purchase history.
 
 ## Online Phone Scanning
 
 - On **Products → Register Product**, select **Connect Phone Online** to display a reusable, five-minute QR session. The phone stays on the mobile scanner and submits each scanned product code to the cashier form; the cashier page restores the session when **Save & Register Next** opens a fresh form.
-- On **POS Checkout**, scan the customer's final QR using the POS camera or enter its `CART-` code, review and edit the imported items, then scan the displayed phone-check QR with the cashier phone. **Connect Cashier Phone** can regenerate it when needed.
+- On **POS Checkout**, scan the customer's final QR using the POS camera or enter its `CART-` code, review and edit the imported items, then check out. If queue lines are long, scan the displayed phone-check QR with the cashier phone for an optional item check. **Connect Cashier Phone** can regenerate it when needed.
 - Scan the verification QR with the cashier's phone. The mobile check page is online and scans each physical item against the expected cart.
 - On the Products list, choose **Print QR** to display a product QR that encodes the same code.
-- Cashier edits to a customer cart reset its verification progress. All pieces must be checked again before the POS enables checkout.
+- Cashier edits to a customer cart reset its mobile verification progress. If you use the phone check, all pieces must be checked again before the POS shows the payment-ready verification status.
 - The mobile camera scanner ignores repeat decodes of the same code for 1.2 seconds while accepting different items immediately. Manual code entry is available if camera access or OCR is unavailable.
 
 ## Routes
