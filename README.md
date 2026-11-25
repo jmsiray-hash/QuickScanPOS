@@ -80,6 +80,23 @@ Set `DB_CONNECTION=mysql` and use the host, port, database name, username, and p
 
 If Aiven requires its CA certificate, add the certificate in Render as a Secret File and set `MYSQL_ATTR_SSL_CA` to that file's path (for example, `/etc/secrets/aiven-ca.pem`). Server certificate verification is enabled when a CA path is provided; `MYSQL_ATTR_SSL_VERIFY_SERVER_CERT` can explicitly override that behavior. Do not put database credentials or CA certificates in the repository.
 
+Alternatively, set `DATABASE_URL` to Aiven's MySQL URI. The application maps `DATABASE_URL` to Laravel's `DB_URL` connection setting at startup.
+
+Required Render environment variables:
+
+```dotenv
+DB_CONNECTION=mysql
+DB_HOST=<Aiven host>
+DB_PORT=<Aiven port>
+DB_DATABASE=<Aiven database name>
+DB_USERNAME=<Aiven username>
+DB_PASSWORD=<Aiven password>
+MYSQL_ATTR_SSL_CA=/etc/secrets/aiven-ca.pem
+MYSQL_ATTR_SSL_VERIFY_SERVER_CERT=true
+```
+
+The password must be copied exactly from Aiven, and the Render service must use the host and port from the same Aiven service. For a password containing special characters, use the unescaped password as the Render environment value.
+
 ## Storage Setup
 
 ```sh

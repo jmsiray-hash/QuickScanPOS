@@ -19,7 +19,35 @@ php artisan route:clear
 DB_CONNECTION="${DB_CONNECTION:-mysql}"
 case "$DB_CONNECTION" in
     mysql)
-        php artisan migrate --force
+        if [ -n "${DB_URL:-}" ]; then
+            DATABASE_SOURCE="DB_URL"
+        elif [ -n "${DATABASE_URL:-}" ]; then
+            export DB_URL="$DATABASE_URL"
+            DATABASE_SOURCE="DATABASE_URL"
+        else
+            DATABASE_SOURCE="DB_HOST/DB_DATABASE"
+        fi
+
+        MISSING_DATABASE_VALUES=""
+        if [ -z "${DB_URL:-}" ]; then
+            for REQUIRED_VALUE in DB_HOST DB_PORT DB_DATABASE DB_USERNAME DB_PASSWORD; do
+                eval "REQUIRED_VALUE_SET=\${$REQUIRED_VALUE:-}"
+                if [ -z "$REQUIRED_VALUE_SET" ]; then
+                    MISSING_DATABASE_VALUES="${MISSING_DATABASE_VALUES} ${REQUIRED_VALUE}"
+                fi
+            done
+
+            if [ -n "$MISSING_DATABASE_VALUES" ]; then
+                echo "Missing database environment variables:${MISSING_DATABASE_VALUES}" >&2
+                exit 1
+            fi
+        fi
+
+        echo "Running migrations using ${DATABASE_SOURCE}."
+        if ! php artisan migrate --force; then
+            echo "Database migration failed. Verify the Render database host, port, database name, username, password, and TLS CA settings." >&2
+            exit 1
+        fi
         ;;
     sqlite)
         SQLITE_DATABASE="${DB_DATABASE:-/var/www/html/database/database.sqlite}"
