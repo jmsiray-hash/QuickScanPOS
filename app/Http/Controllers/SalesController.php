@@ -26,7 +26,7 @@ class SalesController extends Controller
         $end = Carbon::parse($to)->endOfDay();
 
         $sales = Sale::query()
-            ->with('user')
+            ->with(['user', 'customer'])
             ->withCount('items')
             ->whereBetween('created_at', [$start, $end])
             ->latest()
@@ -64,8 +64,28 @@ class SalesController extends Controller
 
     public function show(Sale $sale): View
     {
-        $sale->load(['user', 'items']);
+        $sale->load(['user', 'customer', 'items']);
 
-        return view('sales.show', compact('sale'));
+        $receiptData = [
+            'id' => $sale->id,
+            'created_at' => $sale->created_at->format('M j, Y g:i A'),
+            'cashier' => $sale->user?->name ?? 'Deleted user',
+            'customer_name' => $sale->customer_name,
+            'subtotal' => (float) $sale->subtotal,
+            'tax' => (float) $sale->tax,
+            'discount' => (float) $sale->discount,
+            'total' => (float) $sale->total,
+            'items' => $sale->items->map(static fn ($item): array => [
+                'name' => $item->product_name,
+                'quantity' => $item->quantity,
+                'unit_price' => (float) $item->unit_price,
+                'discount_type' => $item->discount_type,
+                'discount_percent' => (float) $item->discount_percent,
+                'discount_amount' => (float) $item->discount_amount,
+                'line_total' => (float) $item->line_total,
+            ])->values(),
+        ];
+
+        return view('sales.show', compact('sale', 'receiptData'));
     }
 }

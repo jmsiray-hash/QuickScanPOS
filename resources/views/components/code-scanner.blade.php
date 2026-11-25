@@ -129,8 +129,12 @@
                     await barcodeScanner.start(
                         { facingMode: 'environment' },
                         {
-                            fps: 10,
-                            qrbox: { width: 280, height: 120 },
+                            fps: 15,
+                            qrbox: (viewfinderWidth, viewfinderHeight) => {
+                                const width = Math.min(Math.floor(viewfinderWidth * 0.9), 720);
+                                const height = Math.min(Math.floor(viewfinderHeight * 0.42), Math.floor(width * 0.48));
+                                return { width, height };
+                            },
                             formatsToSupport: [
                                 Html5QrcodeSupportedFormats.EAN_13,
                                 Html5QrcodeSupportedFormats.EAN_8,
@@ -213,10 +217,11 @@
 </script>
 
 <style>
-    .code-scanner { display:grid; gap:10px; margin:18px 0; }
+    .code-scanner { display:grid; gap:10px; margin:18px 0; width:100%; }
     .scanner-controls input { flex:1; min-width:180px; border:1px solid #94a3b8; border-radius:5px; font:inherit; padding:10px; }
-    .scanner-camera { border:1px solid #dbe5e3; border-radius:8px; margin-top:8px; padding:12px; }
-    .scanner-reader,.scanner-video { max-width:100%; }
+    .scanner-camera { border:1px solid #dbe5e3; border-radius:8px; margin-top:8px; padding:12px; width:100%; }
+    .scanner-reader,.scanner-video { max-width:100%; width:100%; }
+    .scanner-reader video { height:auto !important; max-width:100% !important; width:100% !important; }
     .scanner-video { width:100%; }
     .scanner-message { min-height:1.5em; margin:0; }
     .scanner-message.error { color:#b91c1c; }

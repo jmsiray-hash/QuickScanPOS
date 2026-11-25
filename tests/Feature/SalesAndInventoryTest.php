@@ -3,10 +3,13 @@
 namespace Tests\Feature;
 
 use App\Models\Product;
+use App\Models\CustomerCart;
+use App\Models\CustomerCartItem;
 use App\Models\Sale;
 use App\Models\SaleItem;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class SalesAndInventoryTest extends TestCase
@@ -46,6 +49,10 @@ class SalesAndInventoryTest extends TestCase
             ->assertSee('Discontinued Cereal')
             ->assertSee('CEREAL-7')
             ->assertSee('Print Receipt')
+            ->assertSee('Connect Bluetooth Printer')
+            ->assertSee('Print to Bluetooth')
+            ->assertSee('52 mm')
+            ->assertSee('80 mm')
             ->assertSee('₱15.00');
     }
 
@@ -66,6 +73,58 @@ class SalesAndInventoryTest extends TestCase
             ->assertSee('Out of stock milk')
             ->assertDontSee('Low stock cereal')
             ->assertSee('Units in stock');
+    }
+
+    public function test_product_can_be_removed_without_losing_sale_snapshots_or_orphaning_carts(): void
+    {
+        Storage::fake('public');
+        $imagePath = 'products/remove-test.jpg';
+        Storage::disk('public')->put($imagePath, 'product image');
+        $product = Product::create([
+            'barcode' => 'REMOVE-ME-1',
+            'name' => 'Removed product',
+            'category' => 'Grocery',
+            'image_path' => $imagePath,
+            'cost_price' => 1,
+            'selling_price' => 2,
+            'stock_quantity' => 3,
+            'is_active' => true,
+        ]);
+        $sale = $this->sale('2.00', now());
+        $saleItem = $sale->items()->create([
+            'product_id' => $product->id,
+            'barcode' => $product->barcode,
+            'product_name' => $product->name,
+            'quantity' => 1,
+            'unit_price' => 2,
+            'line_total' => 2,
+        ]);
+        $cart = CustomerCart::create([
+            'token' => 'CART-REMOVE-TEST1',
+            'customer_name' => 'Remove Test',
+            'status' => 'shopping',
+            'expires_at' => now()->addHour(),
+        ]);
+        $cartItem = CustomerCartItem::create([
+            'customer_cart_id' => $cart->id,
+            'product_id' => $product->id,
+            'qty' => 1,
+            'price' => 2,
+        ]);
+
+        $this->delete(route('products.destroy', $product))
+            ->assertRedirect(route('products.index'))
+            ->assertSessionHas('status', 'Product removed from inventory. Completed sales retain their saved item details.');
+
+        $this->assertDatabaseMissing('products', ['id' => $product->id]);
+        $this->assertDatabaseMissing('customer_cart_items', ['id' => $cartItem->id]);
+        $this->assertDatabaseHas('sale_items', [
+            'id' => $saleItem->id,
+            'product_id' => null,
+            'barcode' => 'REMOVE-ME-1',
+            'product_name' => 'Removed product',
+        ]);
+        Storage::disk('public')->assertMissing($imagePath);
     }
 
     private function sale(string $total, \Illuminate\Support\Carbon $createdAt): Sale

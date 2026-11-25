@@ -2,12 +2,17 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Product;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
+use RuntimeException;
+use Throwable;
 
 class PhoneProductScanController extends Controller
 {
@@ -37,21 +42,17 @@ class PhoneProductScanController extends Controller
 
     public function show(string $token): View
     {
-        $session = Cache::get($this->cacheKey($token));
-        abort_unless(
-            is_array($session)
-                && ($session['status'] ?? null) === 'waiting'
-                && now()->getTimestamp() < ($session['expires_at'] ?? 0),
-            410,
-        );
+        $this->activeSession($token);
 
         return view('products.phone-scan', [
             'submitUrl' => route('products.phone-scan.submit', $token),
+            'saveUrl' => route('products.phone-scan.save', $token),
         ]);
     }
 
     public function submit(Request $request, string $token): JsonResponse
     {
+        $this->activeSession($token);
         $validated = $request->validate([
             'code' => ['required', 'string', 'max:100'],
             'photo' => ['nullable', 'string', 'max:2800000'],
@@ -89,6 +90,73 @@ class PhoneProductScanController extends Controller
                 ? 'Product code sent. Scan the next item when ready.'
                 : 'Product code and photo sent. Scan the next item when ready.',
         ]);
+    }
+
+    public function saveProduct(Request $request, string $token): JsonResponse
+    {
+        $this->activeSession($token);
+        $request->merge([
+            'barcode' => strtoupper(trim((string) $request->input('barcode'))),
+        ]);
+        $validated = $request->validate([
+            'barcode' => ['required', 'string', 'max:100', Rule::unique('products', 'barcode')],
+            'name' => ['required', 'string', 'max:255'],
+            'category' => ['nullable', 'string', 'max:100'],
+            'cost_price' => ['required', 'numeric', 'min:0'],
+            'selling_price' => ['required', 'numeric', 'min:0'],
+            'stock_quantity' => ['required', 'integer', 'min:0'],
+            'photo' => ['required', 'string', 'max:2800000'],
+        ]);
+
+        $photoData = $this->validatedPhoto($validated['photo']);
+        $imageBytes = base64_decode(substr($photoData, strpos($photoData, ',') + 1), true);
+        if ($imageBytes === false) {
+            throw ValidationException::withMessages(['photo' => 'The product photo could not be decoded. Retake it and try again.']);
+        }
+
+        $image = getimagesizefromstring($imageBytes);
+        if ($image === false) {
+            throw ValidationException::withMessages(['photo' => 'The product photo is invalid. Retake it and try again.']);
+        }
+
+        $extension = match ($image['mime']) {
+            'image/jpeg' => 'jpg',
+            'image/png' => 'png',
+            'image/webp' => 'webp',
+            default => throw ValidationException::withMessages(['photo' => 'Use a JPEG, PNG, or WebP product photo.']),
+        };
+        $imagePath = 'products/'.Str::uuid().'.'.$extension;
+        if (! Storage::disk('public')->put($imagePath, $imageBytes)) {
+            throw new RuntimeException('The product photo could not be saved. Check that public storage is writable.');
+        }
+
+        try {
+            $product = Product::create([
+                'barcode' => $validated['barcode'],
+                'name' => $validated['name'],
+                'category' => $validated['category'] ?? null,
+                'image_path' => $imagePath,
+                'cost_price' => $validated['cost_price'],
+                'selling_price' => $validated['selling_price'],
+                'stock_quantity' => $validated['stock_quantity'],
+                'is_active' => true,
+            ]);
+        } catch (Throwable $exception) {
+            Storage::disk('public')->delete($imagePath);
+            throw $exception;
+        }
+
+        return response()->json([
+            'message' => 'Product details and photo saved to inventory.',
+            'product' => [
+                'id' => $product->id,
+                'barcode' => $product->barcode,
+                'name' => $product->name,
+                'selling_price' => (float) $product->selling_price,
+                'stock_quantity' => $product->stock_quantity,
+                'image_url' => route('products.image', $product),
+            ],
+        ], 201);
     }
 
     public function result(string $token): JsonResponse
@@ -154,6 +222,21 @@ class PhoneProductScanController extends Controller
         }
 
         return $matches[1].base64_encode($contents);
+    }
+
+    private function activeSession(string $token): array
+    {
+        $session = Cache::get($this->cacheKey($token));
+        if (
+            ! is_array($session)
+            || ($session['status'] ?? null) !== 'waiting'
+            || now()->getTimestamp() >= ($session['expires_at'] ?? 0)
+        ) {
+            Cache::forget($this->cacheKey($token));
+            abort(410, 'This phone product session has expired. Start a new session from the cashier.');
+        }
+
+        return $session;
     }
 
     private function cacheKey(string $token): string

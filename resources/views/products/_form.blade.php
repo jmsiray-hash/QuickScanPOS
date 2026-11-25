@@ -20,7 +20,7 @@
     <p class="field-hint">Use the printed number or product code here when an item has no barcode.</p>
     <p id="barcode-message" role="status"></p>
 </div>
-<div id="barcode-scanner" style="display:none;max-width:420px">
+<div id="barcode-scanner" style="display:none;max-width:960px;width:100%">
     <div id="product-reader"></div>
     <button class="button button-secondary" type="button" id="stop-product-scanner">Close scanner</button>
 </div>
@@ -122,7 +122,7 @@
             const code = String(rawCode || '').trim().toUpperCase();
             if (!code) return;
             const now = Date.now();
-            if (code === lastCode && now - lastScannedAt < 800) return;
+            if (code === lastCode && now - lastScannedAt < 1200) return;
             lastCode = code;
             lastScannedAt = now;
             codeInput.value = code;
@@ -194,8 +194,14 @@
                 await cameraScanner.start(
                     { facingMode: 'environment' },
                     {
-                        fps: 10,
-                        qrbox: { width: 250, height: 100 },
+                        fps: 15,
+                        qrbox: (viewfinderWidth, viewfinderHeight) => ({
+                            width: Math.min(Math.floor(viewfinderWidth * 0.9), 720),
+                            height: Math.min(
+                                Math.floor(viewfinderHeight * 0.42),
+                                Math.floor(Math.min(viewfinderWidth * 0.9, 720) * 0.48),
+                            ),
+                        }),
                         formatsToSupport: [
                             Html5QrcodeSupportedFormats.EAN_13,
                             Html5QrcodeSupportedFormats.EAN_8,
@@ -399,6 +405,8 @@
 <style>
     .product-code-actions { flex-wrap:wrap; }
     .product-code-actions input { flex:1; min-width:220px; }
+    #barcode-scanner,#product-reader { max-width:960px; width:100%; }
+    #product-reader video { height:auto !important; max-width:100% !important; width:100% !important; }
     .product-image-preview { border:1px solid #dbe5e3; border-radius:8px; display:block; margin-top:8px; max-height:220px; max-width:100%; object-fit:contain; }
     .phone-scan-panel { background:#f0fdfa; border:1px solid #99f6e4; border-radius:8px; margin:12px 0; max-width:480px; padding:16px; }
     #phone-scan-url { border:1px solid #94a3b8; border-radius:5px; font:inherit; margin-top:6px; padding:8px; width:100%; }

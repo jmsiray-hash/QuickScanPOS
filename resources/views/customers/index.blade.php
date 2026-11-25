@@ -15,6 +15,7 @@
                     <th>Full Name</th>
                     <th>Email</th>
                     <th>Phone</th>
+                    <th>Store discount quota (used / remaining)</th>
                     <th>Created At</th>
                     <th>Actions</th>
                 </tr>
@@ -26,6 +27,7 @@
                         <td>{{ $customer->full_name }}</td>
                         <td>{{ $customer->email }}</td>
                         <td>{{ $customer->phone }}</td>
+                        <td>₱{{ number_format($customer->monthly_discount_used, 2) }} / ₱{{ number_format($customer->monthly_discount_limit, 2) }}<br><small>₱{{ number_format($customer->monthly_discount_remaining, 2) }} remaining this month</small></td>
                         <td>{{ $customer->created_at }}</td>
                         <td>
                             <div class="row-actions">
@@ -41,7 +43,7 @@
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="6">No customers found.</td>
+                        <td colspan="7">No customers found.</td>
                     </tr>
                 @endforelse
             </tbody>

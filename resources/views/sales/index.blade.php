@@ -46,19 +46,20 @@
     <h3>Completed transactions</h3>
     <div class="table-wrap">
         <table>
-            <thead><tr><th>Sale</th><th>Date and time</th><th>Cashier</th><th>Lines</th><th>Total</th><th></th></tr></thead>
+            <thead><tr><th>Sale</th><th>Date and time</th><th>Cashier</th><th>Customer</th><th>Lines</th><th>Total</th><th></th></tr></thead>
             <tbody>
                 @forelse($sales as $sale)
                     <tr>
                         <td>#{{ $sale->id }}</td>
                         <td>{{ $sale->created_at->format('M j, Y g:i A') }}</td>
                         <td>{{ $sale->user?->name ?? 'Deleted user' }}</td>
+                        <td>{{ $sale->customer_name ?: 'Walk-in' }}</td>
                         <td>{{ $sale->items_count }}</td>
                         <td>₱{{ number_format($sale->total, 2) }}</td>
                         <td><a href="{{ route('sales.show', $sale) }}">View receipt</a></td>
                     </tr>
                 @empty
-                    <tr><td colspan="6">No completed sales in this date range.</td></tr>
+                    <tr><td colspan="7">No completed sales in this date range.</td></tr>
                 @endforelse
             </tbody>
         </table>

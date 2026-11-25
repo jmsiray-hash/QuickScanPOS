@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\CustomerCart;
 use App\Models\CustomerCartItem;
 use App\Models\Product;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -16,18 +17,19 @@ class ShopController extends Controller
 {
     public function entry(): View
     {
-        return view('shop.entry');
+        return view('shop.entry', [
+            'customer' => Auth::guard('customer')->user(),
+        ]);
     }
 
-    public function start(Request $request): RedirectResponse
+    public function start(): RedirectResponse
     {
-        $validated = $request->validate([
-            'customer_name' => ['required', 'string', 'max:100'],
-        ]);
+        $customer = Auth::guard('customer')->user();
 
         $cart = CustomerCart::create([
+            'customer_id' => $customer->id,
             'token' => $this->newCode('CART-'),
-            'customer_name' => trim($validated['customer_name']),
+            'customer_name' => $customer->full_name,
             'status' => 'shopping',
             'expires_at' => now()->addHours(2),
         ]);
@@ -166,9 +168,13 @@ class ShopController extends Controller
 
     private function findCart(string $token): CustomerCart
     {
-        return CustomerCart::query()
+        $cart = CustomerCart::query()
             ->where('token', strtoupper($token))
             ->firstOrFail();
+
+        abort_unless((int) $cart->customer_id === (int) Auth::guard('customer')->id(), 404);
+
+        return $cart;
     }
 
     private function shoppingCart(string $token): CustomerCart

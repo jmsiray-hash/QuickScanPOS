@@ -21,6 +21,18 @@
 
     <p class="cashier-flow-hint">Scan the customer's final QR here to load their items. The same QR can also be scanned by the cashier phone to open item checking. Use <strong>Connect Cashier Phone</strong> to create a fresh QR if needed. It works online over HTTPS; no Bluetooth pairing is needed.</p>
 
+    <section class="customer-discount-panel">
+        <h3>Customer &amp; Discounts</h3>
+        <div class="row-actions">
+            <input id="customer-search" type="search" placeholder="Find customer by name, email, or phone" autocomplete="off">
+            <button class="button button-secondary" id="find-customer" type="button">Find Customer</button>
+            <select id="customer-results" aria-label="Customer search results" hidden></select>
+            <button class="button button-secondary" id="clear-customer" type="button">Clear Customer</button>
+        </div>
+        <p id="customer-discount-info" class="field-hint">No customer selected. Item discounts require a customer record.</p>
+        <p id="customer-purchase-link" class="field-hint"></p>
+    </section>
+
     <div id="pos-scanner" hidden>
         <div id="pos-reader"></div>
         <p id="pos-scan-mode" class="field-hint">Point the camera at a code.</p>
@@ -29,7 +41,7 @@
     <p id="pos-cart-source" class="field-hint"></p>
     <div class="table-wrap">
         <table>
-            <thead><tr><th>Product / Code</th><th>Qty</th><th>Price</th><th>Total</th><th></th></tr></thead>
+            <thead><tr><th>Product / Code</th><th>Qty</th><th>Price</th><th>Item discount</th><th>Total</th><th></th></tr></thead>
             <tbody id="cart-body"></tbody>
         </table>
     </div>
@@ -55,6 +67,8 @@
             const verificationStatusUrl = @json(route('pos.verify-status', 'VERIFY_CODE'));
             const verificationUrlTemplate = @json(route('pos.verify', 'VERIFY_CODE'));
             const verificationCreateUrl = @json(route('pos.verification.create'));
+            const customerLookupUrl = @json(route('customers.lookup'));
+            const customerSelectUrl = @json(route('pos.customer.select'));
             let scanner = null;
             let lastCode = '';
             let lastScannedAt = 0;
@@ -63,6 +77,8 @@
             let currentCustomerName = null;
             let pollTimer = null;
             let polledStatusUrl = null;
+            let selectedCustomerId = null;
+            let discountIdType = null;
 
             const money = amount => '₱' + Number(amount).toFixed(2);
             const escapeHtml = value => String(value).replace(/[&<>"']/g, char => ({
@@ -137,18 +153,49 @@
                         <td>${escapeHtml(item.name)}<br><small>${escapeHtml(item.barcode)}</small></td>
                         <td><input class="pos-quantity" data-id="${item.product_id}" type="number" min="0" max="${item.available_stock}" value="${item.quantity}" aria-label="Quantity for ${escapeHtml(item.name)}"></td>
                         <td>${money(item.unit_price)}</td>
-                        <td>${money(item.quantity * item.unit_price)}</td>
+                        <td class="pos-discount-fields">
+                            <select class="pos-discount-type" data-id="${item.product_id}" aria-label="Discount type for ${escapeHtml(item.name)}" ${cart.customer_id ? '' : 'disabled'}>
+                                <option value="" ${!item.discount_type ? 'selected' : ''}>None</option>
+                                <option value="store" ${item.discount_type === 'store' ? 'selected' : ''}>Store / loyalty</option>
+                                <option value="pwd" ${item.discount_type === 'pwd' ? 'selected' : ''} ${discountIdType === 'pwd' ? '' : 'disabled'}>PWD ID</option>
+                                <option value="senior" ${item.discount_type === 'senior' ? 'selected' : ''} ${discountIdType === 'senior' ? '' : 'disabled'}>Senior ID</option>
+                            </select>
+                            <label class="sr-only" for="discount-rate-${item.product_id}">Discount percent</label>
+                            <input id="discount-rate-${item.product_id}" class="pos-discount-percent" data-id="${item.product_id}" type="number" min="0" max="100" step="0.01" value="${Number(item.discount_percent || 0)}" ${cart.customer_id && item.discount_type ? '' : 'disabled'} aria-label="Discount percent for ${escapeHtml(item.name)}">
+                            ${Number(item.discount_amount || 0) ? `<small>-${money(item.discount_amount)}</small>` : ''}
+                        </td>
+                        <td>${money(item.line_total ?? item.quantity * item.unit_price)}</td>
                         <td><button class="button button-secondary pos-remove" data-id="${item.product_id}" type="button">Remove</button></td>
                     </tr>
-                `).join('') : '<tr><td colspan="5">Cart is empty. Scan a product or import a CART- code.</td></tr>';
-                document.getElementById('cart-summary').innerHTML = `<p><strong>Subtotal:</strong> ${money(cart.subtotal)} &nbsp; <strong>Total:</strong> ${money(cart.total)}</p>`;
+                `).join('') : '<tr><td colspan="6">Cart is empty. Scan a product or import a CART- code.</td></tr>';
+                document.getElementById('cart-summary').innerHTML = `<p><strong>Subtotal:</strong> ${money(cart.subtotal)} &nbsp; <strong>Discount:</strong> ${money(cart.discount)} &nbsp; <strong>Total:</strong> ${money(cart.total)}</p>`;
                 currentCartToken = cart.customer_cart_token || currentCartToken;
                 currentCustomerName = cart.customer_name || currentCustomerName;
+                selectedCustomerId = cart.customer_id || null;
+                discountIdType = cart.customer_discount_id_type || null;
+                const customerInfo = document.getElementById('customer-discount-info');
+                const customerHistory = document.getElementById('customer-purchase-link');
+                if (selectedCustomerId) {
+                    const idDetails = cart.customer_discount_id_type
+                        ? ` · ${String(cart.customer_discount_id_type).toUpperCase()} ID: ${escapeHtml(cart.customer_discount_id_number || 'number not recorded')}`
+                        : '';
+                    const reminder = cart.customer_store_discount_reminder
+                        ? ' · Reminder: customer usually asks for a store discount'
+                        : '';
+                    customerInfo.innerHTML = `<strong>${escapeHtml(currentCustomerName || 'Selected customer')}</strong>${idDetails}${reminder}<br>Monthly store-discount quota: ${money(cart.monthly_discount_used || 0)} used of ${money(cart.monthly_discount_limit || 0)} · ${money(cart.monthly_discount_remaining || 0)} remaining`;
+                    customerHistory.innerHTML = `<a href="${@json(route('customers.index'))}/${encodeURIComponent(selectedCustomerId)}">Open customer record and purchase history</a>`;
+                } else {
+                    customerInfo.textContent = 'No customer selected. Item discounts require a customer record.';
+                    customerHistory.textContent = '';
+                }
                 if (Object.prototype.hasOwnProperty.call(cart, 'is_verified')) {
                     isVerified = cart.is_verified === true;
                 }
                 document.querySelectorAll('.pos-quantity').forEach(input => {
-                    input.addEventListener('change', () => update(input.dataset.id, Number(input.value)));
+                    input.addEventListener('change', () => updateFromRow(input));
+                });
+                document.querySelectorAll('.pos-discount-type, .pos-discount-percent').forEach(input => {
+                    input.addEventListener('change', () => updateFromRow(input));
                 });
                 document.querySelectorAll('.pos-remove').forEach(button => {
                     button.addEventListener('click', () => update(button.dataset.id, 0));
@@ -200,7 +247,7 @@
                 const code = cartToken || verificationCode || String(rawCode || '').trim().toUpperCase();
                 barcodeInput.value = '';
                 const now = Date.now();
-                if (!code || (code === lastCode && now - lastScannedAt < 800)) return;
+                if (!code || (code === lastCode && now - lastScannedAt < 1200)) return;
                 lastCode = code;
                 lastScannedAt = now;
                 try {
@@ -245,11 +292,22 @@
                     focusScanner();
                 }
             }
-            async function update(productId, quantity) {
+            function updateFromRow(input) {
+                const row = input.closest('tr');
+                update(
+                    input.dataset.id,
+                    Number(row.querySelector('.pos-quantity').value),
+                    row.querySelector('.pos-discount-type').value || null,
+                    Number(row.querySelector('.pos-discount-percent').value || 0),
+                );
+            }
+            async function update(productId, quantity, discountType = null, discountPercent = 0) {
                 try {
                     const result = await request('{{ route('pos.cart.update') }}', 'POST', {
                         product_id: Number(productId),
                         quantity: Number(quantity),
+                        discount_type: discountType,
+                        discount_percent: Number(discountPercent),
                     });
                     if (currentCartToken) {
                         isVerified = false;
@@ -301,6 +359,47 @@
             }
 
             document.getElementById('focus-pos-scanner').addEventListener('click', () => barcodeInput.focus());
+            document.getElementById('find-customer').addEventListener('click', async () => {
+                const search = document.getElementById('customer-search').value.trim();
+                if (!search) {
+                    show('Enter a customer name, email, or phone number.', true);
+                    return;
+                }
+                try {
+                    const result = await request(customerLookupUrl + '?search=' + encodeURIComponent(search));
+                    const select = document.getElementById('customer-results');
+                    select.innerHTML = '<option value="">Select a customer...</option>' + result.customers.map(customer =>
+                        `<option value="${customer.id}">${escapeHtml(customer.full_name)} · ${escapeHtml(customer.email)}</option>`
+                    ).join('');
+                    select.hidden = false;
+                    if (result.customers.length === 0) show('No matching customer account was found.', true);
+                } catch (error) {
+                    show(error.message, true);
+                }
+            });
+            document.getElementById('customer-results').addEventListener('change', async event => {
+                if (!event.target.value) return;
+                try {
+                    const result = await request(customerSelectUrl, 'POST', {
+                        customer_id: Number(event.target.value),
+                    });
+                    render(result.cart);
+                    show(result.message);
+                } catch (error) {
+                    show(error.message, true);
+                }
+            });
+            document.getElementById('clear-customer').addEventListener('click', async () => {
+                try {
+                    const result = await request(customerSelectUrl, 'POST', { customer_id: null });
+                    render(result.cart);
+                    document.getElementById('customer-results').hidden = true;
+                    document.getElementById('customer-results').value = '';
+                    show(result.message);
+                } catch (error) {
+                    show(error.message, true);
+                }
+            });
             document.getElementById('add-pos-code').addEventListener('click', () => scan(barcodeInput.value));
             barcodeInput.addEventListener('keydown', event => {
                 if (event.key !== 'Enter') return;
@@ -326,8 +425,20 @@
                     await scanner.start(
                         { facingMode: 'environment' },
                         {
-                            fps: 10,
-                            qrbox: { width: 280, height: 120 },
+                            fps: 15,
+                            qrbox: (viewfinderWidth, viewfinderHeight) => {
+                                const isQrOnly = formats.length === 1
+                                    && formats[0] === Html5QrcodeSupportedFormats.QR_CODE;
+                                const width = Math.min(Math.floor(viewfinderWidth * 0.9), 720);
+                                if (isQrOnly) {
+                                    const size = Math.min(width, Math.floor(viewfinderHeight * 0.75));
+                                    return { width: size, height: size };
+                                }
+                                return {
+                                    width,
+                                    height: Math.min(Math.floor(viewfinderHeight * 0.42), Math.floor(width * 0.48)),
+                                };
+                            },
                             formatsToSupport: formats,
                         },
                         code => scan(code),
@@ -425,12 +536,18 @@
         .pos-scanner-controls input { flex:1; min-width:230px; border:1px solid #94a3b8; border-radius:5px; font:inherit; padding:10px; }
         .cashier-flow-hint { background:#f0fdfa; border-left:4px solid #0f766e; margin:16px 0; padding:12px 16px; }
         .pos-quantity { width:72px; border:1px solid #94a3b8; border-radius:5px; font:inherit; padding:6px; }
+        .pos-discount-fields { min-width:150px; }
+        .pos-discount-fields select,.pos-discount-fields input { display:block; margin:3px 0; max-width:150px; }
+        .customer-discount-panel { background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px; margin:20px 0; padding:16px; }
+        .customer-discount-panel input,.customer-discount-panel select { border:1px solid #94a3b8; border-radius:5px; font:inherit; max-width:360px; padding:9px; }
+        .sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
         .verification-panel { background:#f0fdfa; border:1px solid #99f6e4; border-radius:8px; margin:20px 0; padding:20px; }
         #checkout.payment-ready { background:#15803d; }
         #checkout.payment-warning { background:#b45309; }
         #verification-qr { display:flex; justify-content:center; margin:16px; }
         .verified-banner { background:#dcfce7; color:#166534; font-weight:800; padding:16px; text-align:center; }
-        #pos-reader { max-width:520px; }
+        #pos-reader { max-width:960px; width:100%; }
+        #pos-reader video { height:auto !important; max-width:100% !important; width:100% !important; }
         #checkout:disabled { background:#94a3b8; cursor:not-allowed; }
         @media(max-width:640px) { .pos-scanner-controls { align-items:stretch; flex-direction:column; } .pos-scanner-controls .button { min-height:44px; } }
     </style>

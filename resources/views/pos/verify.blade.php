@@ -6,9 +6,12 @@
     <section class="verify-page">
         <p class="verify-eyebrow">QUICKSCANPOS · CASHIER PHONE</p>
         <h1>Check the items</h1>
-        <p>Scan every physical product in the customer's cart. You can scan with this phone's camera or enter a product code. Checkout unlocks after all pieces match.</p>
+        <p>Scan every physical product in the cashier's cart. You can scan with this phone's camera or enter a product code. Checkout unlocks after all pieces match.</p>
         <p>Cart for <strong>{{ $cart->customer_name }}</strong> · {{ $cart->token }}</p>
         <div id="verify-message" class="alert" role="status" hidden></div>
+        <div id="waiting-for-items" class="waiting-for-items" @if ($cartData['items']->isNotEmpty()) hidden @endif>
+            Phone connected. Waiting for the cashier to add items. This page will update automatically.
+        </div>
         <div id="verified-banner" class="verified-banner" @if (! $cart->is_verified) hidden @endif>{{ $readyLabel }}</div>
         <div id="verify-summary"></div>
         @include('components.code-scanner')
@@ -32,21 +35,23 @@
             const summary = document.getElementById('verify-summary');
             const message = document.getElementById('verify-message');
             const banner = document.getElementById('verified-banner');
+            const waitingNotice = document.getElementById('waiting-for-items');
             const escapeHtml = value => String(value).replace(/[&<>"']/g, char => ({
                 '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
             })[char]);
 
             function render() {
-                body.innerHTML = cart.items.map(item => `
+                body.innerHTML = cart.items.length ? cart.items.map(item => `
                     <tr>
                         <td data-label="Expected product">${escapeHtml(item.name)}<br><small>${escapeHtml(item.code)}</small></td>
                         <td data-label="Expected qty">${item.qty}</td>
                         <td data-label="Checked qty">${item.checked_qty}</td>
                         <td data-label="Action"><button class="button button-secondary verify-one" data-code="${escapeHtml(item.code)}" type="button" ${item.is_checked ? 'disabled' : ''}>Check one</button></td>
                     </tr>
-                `).join('');
+                `).join('') : '<tr><td colspan="4">Waiting for the cashier to add items to this checkout.</td></tr>';
                 summary.innerHTML = `<p><strong>Total Expected Pieces:</strong> ${cart.total_expected_pieces} &nbsp; <strong>Total Checked Pieces:</strong> ${cart.total_checked_pieces}</p>`;
                 banner.hidden = !cart.is_verified;
+                waitingNotice.hidden = cart.items.length > 0;
                 body.querySelectorAll('.verify-one').forEach(button => {
                     button.addEventListener('click', () => checkItem(button.dataset.code));
                 });
@@ -120,6 +125,7 @@
         .verify-eyebrow { color:#0f766e; font-size:.76rem; font-weight:800; letter-spacing:.12em; }
         .verify-page h1 { font-size:clamp(1.8rem,6vw,2.4rem); }
         .verified-banner { background:#dcfce7; border:2px solid #16a34a; border-radius:8px; color:#166534; font-size:clamp(1.1rem,3vw,1.7rem); font-weight:800; margin:18px 0; padding:20px; text-align:center; }
+        .waiting-for-items { background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; color:#1e40af; margin:16px 0; padding:14px; }
         @media(max-width:640px) {
             main { padding:16px; }
             .verify-page { max-width:480px; }

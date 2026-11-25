@@ -1,5 +1,6 @@
 <?php
 use App\Http\Controllers\CustomerController;
+use App\Http\Controllers\CustomerAuthController;
 use App\Http\Controllers\PageController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\UserController;
@@ -15,25 +16,33 @@ Route::get('/home',[PageController::class,'home']);
 Route::get('/about',[PageController::class,'about'])->name('about');
 Route::get('/dashboard',fn()=>view('dashboard'))->middleware('auth')->name('dashboard');
 Route::get('/shop',[ShopController::class,'entry'])->name('shop.entry');
-Route::post('/shop',[ShopController::class,'start'])->name('shop.start');
-Route::get('/shop/cart/{token}',[ShopController::class,'show'])->name('shop.cart');
-Route::post('/shop/cart/{token}/scan',[ShopController::class,'scan'])->name('shop.cart.scan');
-Route::put('/shop/cart/{token}/items/{item}',[ShopController::class,'updateItem'])->name('shop.cart.item.update');
-Route::post('/shop/cart/{token}/finalize',[ShopController::class,'finalize'])->name('shop.cart.finalize');
+Route::post('/shop/login',[CustomerAuthController::class,'login'])->name('shop.login');
+Route::get('/shop/register',[CustomerAuthController::class,'registerForm'])->name('shop.register');
+Route::post('/shop/register',[CustomerAuthController::class,'register'])->name('shop.register.store');
+Route::post('/shop/logout',[CustomerAuthController::class,'logout'])->name('shop.logout');
+Route::middleware('customer.auth')->group(function (): void {
+ Route::post('/shop',[ShopController::class,'start'])->name('shop.start');
+ Route::get('/shop/cart/{token}',[ShopController::class,'show'])->name('shop.cart');
+ Route::post('/shop/cart/{token}/scan',[ShopController::class,'scan'])->name('shop.cart.scan');
+ Route::put('/shop/cart/{token}/items/{item}',[ShopController::class,'updateItem'])->name('shop.cart.item.update');
+ Route::post('/shop/cart/{token}/finalize',[ShopController::class,'finalize'])->name('shop.cart.finalize');
+});
 Route::get('/pos/verify/{code}',[PosVerificationController::class,'show'])->name('pos.verify');
 Route::post('/pos/verify/{code}/check-item',[PosVerificationController::class,'checkItem'])->name('pos.verify.check');
 Route::get('/mobile-product-scan/{token}',[PhoneProductScanController::class,'show'])->name('products.phone-scan.mobile');
 Route::post('/mobile-product-scan/{token}',[PhoneProductScanController::class,'submit'])->name('products.phone-scan.submit');
+Route::post('/mobile-product-scan/{token}/save',[PhoneProductScanController::class,'saveProduct'])->name('products.phone-scan.save');
 Route::get('/products/{product}/image',[ProductController::class,'image'])->name('products.image');
 Route::middleware('auth')->group(function(){
  Route::resource('customers',CustomerController::class);
  Route::get('/users/{user}/avatar',[UserController::class,'avatar'])->name('users.avatar');
  Route::resource('users',UserController::class);
  Route::get('/products/{product}/qr',[ProductController::class,'qr'])->name('products.qr');
- Route::resource('products',ProductController::class)->except(['show','destroy']);
+ Route::resource('products',ProductController::class)->except(['show']);
  Route::post('/products/phone-scan',[PhoneProductScanController::class,'create'])->name('products.phone-scan.create');
  Route::get('/products/phone-scan/{token}/result',[PhoneProductScanController::class,'result'])->name('products.phone-scan.result');
  Route::get('/api/products/lookup',[ProductController::class,'lookup'])->name('products.lookup');
+ Route::get('/api/customers/lookup',[CustomerController::class,'lookup'])->name('customers.lookup');
  Route::get('/pos/store-qr',[PosController::class,'storeQr'])->name('pos.store-qr');
  Route::get('/pos/import-cart/{token}',[PosController::class,'importCart'])->name('pos.import-cart');
  Route::post('/pos/verification',[PosController::class,'generateVerification'])->name('pos.verification.create');
@@ -41,6 +50,7 @@ Route::middleware('auth')->group(function(){
  Route::get('/pos',[PosController::class,'index'])->name('pos.index');
  Route::post('/pos/scan-item',[PosController::class,'scanItem'])->name('pos.scan');
  Route::post('/pos/cart/update',[PosController::class,'updateCart'])->name('pos.cart.update');
+ Route::post('/pos/customer',[PosController::class,'selectCustomer'])->name('pos.customer.select');
  Route::post('/pos/checkout',[PosController::class,'checkout'])->name('pos.checkout');
  Route::get('/sales',[SalesController::class,'index'])->name('sales.index');
  Route::get('/sales/{sale}',[SalesController::class,'show'])->name('sales.show');

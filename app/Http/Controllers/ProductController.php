@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Product;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -144,6 +145,25 @@ class ProductController extends Controller
         }
 
         return to_route('products.index')->with('status', 'Product updated successfully.');
+    }
+
+    public function destroy(Product $product): RedirectResponse
+    {
+        $imagePath = $product->image_path;
+
+        DB::transaction(function () use ($product): void {
+            $product->customerCartItems()->delete();
+            $product->delete();
+        });
+
+        if ($imagePath !== null && ! Storage::disk('public')->delete($imagePath)) {
+            report(new RuntimeException('Product was removed, but its stored image could not be deleted: '.$imagePath));
+        }
+
+        return to_route('products.index')->with(
+            'status',
+            'Product removed from inventory. Completed sales retain their saved item details.',
+        );
     }
 
     public function lookup(Request $request): JsonResponse

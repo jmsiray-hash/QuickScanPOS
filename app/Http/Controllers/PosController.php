@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\CustomerCart;
+use App\Models\Customer;
 use App\Models\Product;
 use App\Models\Sale;
 use Illuminate\Http\JsonResponse;
@@ -65,15 +66,21 @@ class PosController extends Controller
                 'quantity' => $item->qty,
                 'unit_price' => (float) $item->price,
                 'available_stock' => $product->stock_quantity,
+                'discount_type' => null,
+                'discount_percent' => 0,
             ];
         }
 
+        session()->forget('pos_customer_id');
         session([
             'pos_cart' => $posCart,
             'customer_cart_id' => $cart->id,
             'customer_cart_token' => $cart->token,
             'pos_verification_code' => $cart->verification_code,
         ]);
+        if ($cart->customer_id !== null) {
+            session(['pos_customer_id' => $cart->customer_id]);
+        }
 
         return response()->json([
             'message' => 'Customer cart loaded.',
@@ -94,9 +101,6 @@ class PosController extends Controller
     public function generateVerification(): JsonResponse
     {
         $posCart = session('pos_cart', []);
-        if ($posCart === []) {
-            return response()->json(['message' => 'Add items before generating a verification QR.'], 422);
-        }
 
         $cartId = session('customer_cart_id');
         $customerCart = null;
@@ -110,8 +114,9 @@ class PosController extends Controller
                 }
             } else {
                 $customerCart = CustomerCart::create([
+                    'customer_id' => session('pos_customer_id'),
                     'token' => $this->newCode('CART-'),
-                    'customer_name' => 'POS Checkout',
+                    'customer_name' => Customer::query()->find(session('pos_customer_id'))?->full_name ?? 'POS Checkout',
                     'status' => 'ready_for_checkout',
                     'expires_at' => now()->addHours(2),
                 ]);
@@ -157,7 +162,9 @@ class PosController extends Controller
         ]);
 
         return response()->json([
-            'message' => 'Mobile item verification is ready.',
+            'message' => $posCart === []
+                ? 'Cashier phone connected. Add items at the register; the phone will update automatically.'
+                : 'Mobile item verification is ready.',
             'customer_cart_token' => $customerCart->token,
             'verification_code' => $verificationCode,
             'verification_url' => route('pos.verify', $verificationCode),
@@ -204,6 +211,7 @@ class PosController extends Controller
             return response()->json(['message' => 'Cart quantity cannot exceed available stock.'], 422);
         }
 
+        $existingLine = $cart[$key] ?? [];
         $cart[$key] = [
             'product_id' => $product->id,
             'barcode' => $product->barcode,
@@ -211,6 +219,8 @@ class PosController extends Controller
             'quantity' => $quantity + 1,
             'unit_price' => (float) $product->selling_price,
             'available_stock' => $product->stock_quantity,
+            'discount_type' => $existingLine['discount_type'] ?? null,
+            'discount_percent' => $existingLine['discount_percent'] ?? 0,
         ];
         session(['pos_cart' => $cart]);
         $this->syncLinkedCart($cart);
@@ -226,6 +236,8 @@ class PosController extends Controller
         $validated = $request->validate([
             'product_id' => ['required', 'integer'],
             'quantity' => ['required', 'integer', 'min:0'],
+            'discount_type' => ['sometimes', 'nullable', 'in:store,pwd,senior'],
+            'discount_percent' => ['sometimes', 'numeric', 'min:0', 'max:100'],
         ]);
 
         $product = Product::findOrFail($validated['product_id']);
@@ -242,10 +254,22 @@ class PosController extends Controller
                     'barcode' => $product->barcode,
                     'name' => $product->name,
                     'unit_price' => (float) $product->selling_price,
+                    'discount_type' => null,
+                    'discount_percent' => 0,
                 ];
             }
             $cart[$key]['quantity'] = $quantity;
             $cart[$key]['available_stock'] = $product->stock_quantity;
+            if (array_key_exists('discount_type', $validated)) {
+                $cart[$key]['discount_type'] = $validated['discount_type'] ?: null;
+                if ($cart[$key]['discount_type'] === null) {
+                    $cart[$key]['discount_percent'] = 0;
+                }
+            }
+            if (array_key_exists('discount_percent', $validated) && ($cart[$key]['discount_type'] ?? null) !== null) {
+                $cart[$key]['discount_percent'] = (float) $validated['discount_percent'];
+            }
+            $this->assertDiscountEligible($cart[$key]);
         } else {
             return response()->json(['message' => 'Quantity exceeds stock or the product is inactive.'], 422);
         }
@@ -254,6 +278,42 @@ class PosController extends Controller
         $this->syncLinkedCart($cart);
 
         return response()->json(['cart' => $this->cart()]);
+    }
+
+    public function selectCustomer(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'customer_id' => ['nullable', 'integer', 'exists:customers,id'],
+        ]);
+        $customerCartId = session('customer_cart_id');
+        if ($customerCartId !== null) {
+            $cartCustomerId = CustomerCart::query()->findOrFail($customerCartId)->customer_id;
+            if ($cartCustomerId !== null && (int) $cartCustomerId !== (int) ($validated['customer_id'] ?? 0)) {
+                return response()->json(['message' => 'This Scan & Go cart belongs to another customer.'], 422);
+            }
+        }
+
+        $customerId = $validated['customer_id'] ?? null;
+        if ((int) session('pos_customer_id') !== (int) $customerId) {
+            $cart = session('pos_cart', []);
+            foreach ($cart as &$line) {
+                $line['discount_type'] = null;
+                $line['discount_percent'] = 0;
+            }
+            unset($line);
+            session(['pos_cart' => $cart]);
+        }
+
+        if ($customerId === null) {
+            session()->forget('pos_customer_id');
+        } else {
+            session(['pos_customer_id' => $customerId]);
+        }
+
+        return response()->json([
+            'message' => $customerId === null ? 'Customer selection cleared.' : 'Customer selected.',
+            'cart' => $this->cart(),
+        ]);
     }
 
     public function checkout(Request $request): JsonResponse
@@ -282,7 +342,21 @@ class PosController extends Controller
                     }
                 }
 
-                $subtotal = 0;
+                $customerId = $customerCart?->customer_id ?? session('pos_customer_id');
+                if (
+                    $customerCart?->customer_id !== null
+                    && (int) session('pos_customer_id') !== (int) $customerCart->customer_id
+                ) {
+                    abort(422, 'The selected customer does not match the Scan & Go account.');
+                }
+                $customer = $customerId !== null
+                    ? Customer::query()->lockForUpdate()->findOrFail($customerId)
+                    : null;
+                $remainingStoreDiscount = $customer
+                    ? max(0, (float) $customer->monthly_discount_limit - $this->monthlyStoreDiscountUsed($customer))
+                    : 0;
+                $subtotal = 0.0;
+                $discountTotal = 0.0;
                 $lockedProducts = [];
                 foreach ($cart as $line) {
                     $product = Product::query()->lockForUpdate()->findOrFail($line['product_id']);
@@ -293,20 +367,48 @@ class PosController extends Controller
                     $unitPrice = $customerCartId !== null
                         ? (float) $line['unit_price']
                         : (float) $product->selling_price;
-                    $lineTotal = $unitPrice * (int) $line['quantity'];
+                    $grossLineTotal = round($unitPrice * (int) $line['quantity'], 2);
+                    $discountType = $line['discount_type'] ?? null;
+                    $discountPercent = (float) ($line['discount_percent'] ?? 0);
+                    $this->assertDiscountEligible($line, $customer);
+                    $discountAmount = round($grossLineTotal * $discountPercent / 100, 2);
+                    if ($discountType === 'store') {
+                        $discountAmount = min($discountAmount, $remainingStoreDiscount);
+                        $remainingStoreDiscount = round($remainingStoreDiscount - $discountAmount, 2);
+                    }
+                    $discountTotal += $discountAmount;
+                    $lineTotal = round($grossLineTotal - $discountAmount, 2);
                     $subtotal += $lineTotal;
-                    $lockedProducts[] = [$product, (int) $line['quantity'], $unitPrice, $lineTotal];
+                    $lockedProducts[] = [
+                        $product,
+                        (int) $line['quantity'],
+                        $unitPrice,
+                        $lineTotal,
+                        $discountType,
+                        $discountPercent,
+                        $discountAmount,
+                    ];
                 }
 
                 $sale = Sale::create([
                     'user_id' => $request->user()->id,
-                    'subtotal' => $subtotal,
+                    'customer_id' => $customer?->id,
+                    'customer_name' => $customer?->full_name ?? $customerCart?->customer_name,
+                    'subtotal' => round($subtotal + $discountTotal, 2),
                     'tax' => 0,
-                    'discount' => 0,
+                    'discount' => round($discountTotal, 2),
                     'total' => $subtotal,
                 ]);
 
-                foreach ($lockedProducts as [$product, $quantity, $unitPrice, $lineTotal]) {
+                foreach ($lockedProducts as [
+                    $product,
+                    $quantity,
+                    $unitPrice,
+                    $lineTotal,
+                    $discountType,
+                    $discountPercent,
+                    $discountAmount,
+                ]) {
                     $product->decrement('stock_quantity', $quantity);
                     $sale->items()->create([
                         'product_id' => $product->id,
@@ -314,6 +416,9 @@ class PosController extends Controller
                         'product_name' => $product->name,
                         'quantity' => $quantity,
                         'unit_price' => $unitPrice,
+                        'discount_type' => $discountType,
+                        'discount_percent' => $discountPercent,
+                        'discount_amount' => $discountAmount,
                         'line_total' => $lineTotal,
                     ]);
                 }
@@ -337,6 +442,7 @@ class PosController extends Controller
             'customer_cart_id',
             'customer_cart_token',
             'pos_verification_code',
+            'pos_customer_id',
         ]);
 
         return response()->json([
@@ -408,24 +514,84 @@ class PosController extends Controller
     private function cart(): array
     {
         $items = array_values(session('pos_cart', []));
-        $subtotal = collect($items)->sum(
-            static fn (array $item): float => (int) $item['quantity'] * (float) $item['unit_price'],
-        );
         $customerCart = session('customer_cart_id')
             ? CustomerCart::query()->find(session('customer_cart_id'))
             : null;
+        $customer = session('pos_customer_id')
+            ? Customer::query()->find(session('pos_customer_id'))
+            : $customerCart?->customer;
+        $subtotal = 0.0;
+        $discount = 0.0;
+        $remaining = $customer
+            ? max(0, (float) $customer->monthly_discount_limit - $this->monthlyStoreDiscountUsed($customer))
+            : 0;
+
+        foreach ($items as &$item) {
+            $lineSubtotal = round((int) $item['quantity'] * (float) $item['unit_price'], 2);
+            $lineDiscount = round($lineSubtotal * (float) ($item['discount_percent'] ?? 0) / 100, 2);
+            if (($item['discount_type'] ?? null) === 'store') {
+                $lineDiscount = min($lineDiscount, $remaining);
+                $remaining = round($remaining - $lineDiscount, 2);
+            }
+            $item['discount_amount'] = $lineDiscount;
+            $item['line_total'] = round($lineSubtotal - $lineDiscount, 2);
+            $subtotal += $lineSubtotal;
+            $discount += $lineDiscount;
+        }
+        unset($item);
 
         return [
             'items' => $items,
             'subtotal' => round($subtotal, 2),
             'tax' => 0,
-            'discount' => 0,
-            'total' => round($subtotal, 2),
+            'discount' => round($discount, 2),
+            'total' => round($subtotal - $discount, 2),
             'customer_cart_token' => session('customer_cart_token'),
-            'customer_name' => $customerCart?->customer_name,
+            'customer_name' => $customer?->full_name ?? $customerCart?->customer_name,
+            'customer_id' => $customer?->id,
+            'customer_discount_id_type' => $customer?->discount_id_type,
+            'customer_discount_id_number' => $customer?->discount_id_number,
+            'customer_store_discount_reminder' => (bool) ($customer?->store_discount_reminder ?? false),
+            'monthly_discount_limit' => (float) ($customer?->monthly_discount_limit ?? 0),
+            'monthly_discount_used' => $customer ? $this->monthlyStoreDiscountUsed($customer) : 0,
+            'monthly_discount_remaining' => $customer
+                ? max(0, (float) $customer->monthly_discount_limit - $this->monthlyStoreDiscountUsed($customer))
+                : 0,
             'is_verified' => (bool) ($customerCart?->is_verified ?? false),
             'verification_code' => session('pos_verification_code'),
         ];
+    }
+
+    private function monthlyStoreDiscountUsed(Customer $customer): float
+    {
+        return (float) \App\Models\SaleItem::query()
+            ->where('discount_type', 'store')
+            ->whereHas('sale', function ($query) use ($customer): void {
+                $query->where('customer_id', $customer->id)
+                    ->whereBetween('created_at', [now()->startOfMonth(), now()->endOfMonth()]);
+            })
+            ->sum('discount_amount');
+    }
+
+    private function assertDiscountEligible(array $line, ?Customer $customer = null): void
+    {
+        $type = $line['discount_type'] ?? null;
+        $percent = (float) ($line['discount_percent'] ?? 0);
+        if ($type === null || $percent === 0.0) {
+            return;
+        }
+
+        $customer ??= session('pos_customer_id')
+            ? Customer::query()->find(session('pos_customer_id'))
+            : null;
+        if ($customer === null) {
+            abort(422, 'Select a customer before applying a discount.');
+        }
+        if (in_array($type, ['pwd', 'senior'], true)) {
+            if ($customer->discount_id_type !== $type || blank($customer->discount_id_number)) {
+                abort(422, 'The customer does not have a recorded '.strtoupper($type).' ID.');
+            }
+        }
     }
 
     private function normalizeScanCode(string $rawCode): string
