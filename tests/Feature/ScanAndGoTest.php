@@ -617,15 +617,45 @@ class ScanAndGoTest extends TestCase
         $this->assertSame('Registered Shopper', $cart->customer_name);
 
         $this->app['auth']->guard('customer')->logout();
-        $this->get(route('shop.cart', $cart->token))->assertRedirect(route('shop.entry'));
+        $this->get(route('shop.cart', $cart->token))->assertNotFound();
         $this->post(route('shop.login'), [
             'email' => 'REGISTERED@example.test',
             'password' => 'secure-pass-123',
-        ])->assertRedirect(route('shop.cart', $cart->token));
+        ])->assertRedirect(route('shop.entry'));
+        $this->get(route('shop.cart', $cart->token))->assertOk();
 
         $otherCustomer = $this->signInShopper('Other Shopper');
         $this->get(route('shop.cart', $cart->token))->assertNotFound();
         $this->assertNotSame($customer->id, $otherCustomer->id);
+    }
+
+    public function test_guest_can_enter_store_and_use_scan_and_go_without_an_account(): void
+    {
+        $this->app['auth']->guard('customer')->logout();
+        $this->get(route('shop.entry'))
+            ->assertOk()
+            ->assertSee('Continue as Guest')
+            ->assertSee('Start Shopping as Guest')
+            ->assertSee('Sign In');
+
+        $this->post(route('shop.start'), [
+            'guest' => 1,
+            'customer_name' => 'Walk-in Shopper',
+        ])->assertRedirect();
+
+        $cart = CustomerCart::query()->where('customer_name', 'Walk-in Shopper')->firstOrFail();
+        $this->assertNull($cart->customer_id);
+        $this->get(route('shop.cart', $cart->token))
+            ->assertOk()
+            ->assertSee('Walk-in Shopper');
+
+        $product = $this->product('GUEST-CART-ITEM', 2, 4.25);
+        $this->postJson(route('shop.cart.scan', $cart->token), ['code' => $product->barcode])
+            ->assertOk()
+            ->assertJsonPath('cart.total_pieces', 1);
+        $this->postJson(route('shop.cart.finalize', $cart->token))
+            ->assertOk()
+            ->assertJsonPath('cart.status', 'ready_for_checkout');
     }
 
     public function test_staff_can_record_discount_id_and_monthly_quota_on_customer(): void

@@ -22,14 +22,22 @@ class ShopController extends Controller
         ]);
     }
 
-    public function start(): RedirectResponse
+    public function start(Request $request): RedirectResponse
     {
         $customer = Auth::guard('customer')->user();
+        $validated = $request->validate([
+            'customer_name' => ['nullable', 'string', 'max:100'],
+            'guest' => ['nullable', 'boolean'],
+        ]);
+        $guest = $request->boolean('guest') || $customer === null;
+        $customerName = trim((string) ($validated['customer_name'] ?? ''));
 
         $cart = CustomerCart::create([
-            'customer_id' => $customer->id,
+            'customer_id' => $guest ? null : $customer->id,
             'token' => $this->newCode('CART-'),
-            'customer_name' => $customer->full_name,
+            'customer_name' => $guest
+                ? ($customerName !== '' ? $customerName : 'Guest Shopper')
+                : $customer->full_name,
             'status' => 'shopping',
             'expires_at' => now()->addHours(2),
         ]);
@@ -172,7 +180,9 @@ class ShopController extends Controller
             ->where('token', strtoupper($token))
             ->firstOrFail();
 
-        abort_unless((int) $cart->customer_id === (int) Auth::guard('customer')->id(), 404);
+        if ($cart->customer_id !== null) {
+            abort_unless((int) $cart->customer_id === (int) Auth::guard('customer')->id(), 404);
+        }
 
         return $cart;
     }

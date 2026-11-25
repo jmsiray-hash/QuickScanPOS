@@ -60,12 +60,12 @@ The scanner uses the browser camera API through `html5-qrcode` (and `getUserMedi
 ## Customer Scan & Go
 
 1. Sign in as a cashier/admin and open **POS Checkout → Store Entry QR**, or visit `/pos/store-qr`. Print or display the QR code.
-2. The customer scans it, opens `/shop`, then signs in or creates an account. Customer accounts keep carts and purchase history linked to the account.
+2. The customer scans it and opens `/shop`. Sign-in is optional: choose **Start Shopping as Guest** to shop without an account, or sign in/create an account to link purchases to customer history.
 3. On the cart page, use **Scan Barcode with Camera**, **Read Printed Number / Can Code**, or type a code and tap **Add Code**. OCR puts the recognized code in the input for review before adding it.
 4. On the phone-friendly cart page, change quantities or tap **Remove item** as needed. The page shows **Total Pieces** and **Running Grand Total**.
 5. Tap **Finish & Generate Cashier QR**. The resulting QR opens the cashier-phone item scanner. The cashier POS can scan that same QR to load the cart, or the cart can be loaded by entering its displayed `CART-...` code.
 
-Shopping carts expire after two hours and are only accessible to their signed-in customer. Product availability is checked while adding items, when the cashier imports the cart, and again during checkout.
+Shopping carts expire after two hours. Account-linked carts require that customer to be signed in; guest carts use their unique cart link. Product availability is checked while adding items, when the cashier imports the cart, and again during checkout.
 
 ## Cashier Import, Verification, and Payment
 
@@ -121,4 +121,4 @@ POST   /mobile-product-scan/{token}/save
 GET    /products/phone-scan/{token}/result
 ```
 
-Customer shopping routes require the matching signed-in customer account; cashier phone verification uses its unique verification code. POS, store QR, cart import, customer lookup, and cashier status routes require staff authentication. POST/PUT routes use Laravel CSRF protection.
+Customer shopping can be used without login through the unique guest cart link; account-linked carts require the matching signed-in customer. Cashier phone verification uses its unique verification code. POS, store QR, cart import, customer lookup, and cashier status routes require staff authentication. POST/PUT routes use Laravel CSRF protection.
