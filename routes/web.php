@@ -8,6 +8,7 @@ use App\Http\Controllers\PosController;
 use App\Http\Controllers\PosVerificationController;
 use App\Http\Controllers\PhoneProductScanController;
 use App\Http\Controllers\ShopController;
+use App\Http\Controllers\SalesController;
 use Illuminate\Support\Facades\Route;
 Route::get('/',[PageController::class,'home'])->name('home');
 Route::get('/home',[PageController::class,'home']);
@@ -23,6 +24,7 @@ Route::get('/pos/verify/{code}',[PosVerificationController::class,'show'])->name
 Route::post('/pos/verify/{code}/check-item',[PosVerificationController::class,'checkItem'])->name('pos.verify.check');
 Route::get('/mobile-product-scan/{token}',[PhoneProductScanController::class,'show'])->name('products.phone-scan.mobile');
 Route::post('/mobile-product-scan/{token}',[PhoneProductScanController::class,'submit'])->name('products.phone-scan.submit');
+Route::get('/products/{product}/image',[ProductController::class,'image'])->name('products.image');
 Route::middleware('auth')->group(function(){
  Route::resource('customers',CustomerController::class);
  Route::get('/users/{user}/avatar',[UserController::class,'avatar'])->name('users.avatar');
@@ -40,6 +42,8 @@ Route::middleware('auth')->group(function(){
  Route::post('/pos/scan-item',[PosController::class,'scanItem'])->name('pos.scan');
  Route::post('/pos/cart/update',[PosController::class,'updateCart'])->name('pos.cart.update');
  Route::post('/pos/checkout',[PosController::class,'checkout'])->name('pos.checkout');
+ Route::get('/sales',[SalesController::class,'index'])->name('sales.index');
+ Route::get('/sales/{sale}',[SalesController::class,'show'])->name('sales.show');
  Route::get('/profile',[ProfileController::class,'edit'])->name('profile.edit');
  Route::patch('/profile',[ProfileController::class,'update'])->name('profile.update');
  Route::delete('/profile',[ProfileController::class,'destroy'])->name('profile.destroy');

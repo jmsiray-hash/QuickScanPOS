@@ -35,7 +35,7 @@
             let barcodeScanner = null;
             let stream = null;
             let ocrBusy = false;
-            let lastScannedAt = 0;
+            const recentlyScanned = new Map();
 
             reader.id = `mobile-code-reader-${index}`;
 
@@ -81,8 +81,8 @@
             function emitCode(value) {
                 const code = String(value || '').trim().toUpperCase();
                 const now = Date.now();
-                if (!code || now - lastScannedAt < 1200) return;
-                lastScannedAt = now;
+                if (!code || now - (recentlyScanned.get(code) || 0) < 1200) return;
+                recentlyScanned.set(code, now);
                 input.value = '';
                 notify('Scanned: ' + code);
                 beep();

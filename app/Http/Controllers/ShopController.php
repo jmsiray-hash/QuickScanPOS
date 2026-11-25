@@ -203,6 +203,9 @@ class ShopController extends Controller
                 'product_id' => $item->product_id,
                 'code' => $item->product->barcode,
                 'name' => $item->product->name,
+                'image_url' => $item->product->image_path
+                    ? route('products.image', $item->product)
+                    : null,
                 'qty' => $item->qty,
                 'checked_qty' => $item->checked_qty,
                 'is_checked' => $item->is_checked,

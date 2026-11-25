@@ -28,6 +28,12 @@
             <p>Review stock, edit products, and print QR codes for registered products.</p>
             <span class="dashboard-card-action">View products &rarr;</span>
         </a>
+        <a class="dashboard-card" href="{{ route('sales.index') }}">
+            <span class="dashboard-card-label">REPORTS</span>
+            <h2>Sales &amp; Sold Items</h2>
+            <p>Review completed transactions, sold quantities, and revenue by date range.</p>
+            <span class="dashboard-card-action">View sales reports &rarr;</span>
+        </a>
         <a class="dashboard-card" href="{{ route('pos.store-qr') }}">
             <span class="dashboard-card-label">SCAN &amp; GO</span>
             <h2>Store Entry QR</h2>

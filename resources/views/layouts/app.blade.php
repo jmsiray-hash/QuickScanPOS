@@ -33,6 +33,7 @@
                 <a href="{{ route('dashboard') }}">Dashboard</a>
                 <a href="{{ route('pos.index') }}">Checkout</a>
                 <a href="{{ route('products.index') }}">Products</a>
+                <a href="{{ route('sales.index') }}">Sales Reports</a>
                 <a href="{{ route('customers.index') }}">Customers</a>
                 <a href="{{ route('users.index') }}">Users</a>
                 <form action="{{ route('logout') }}" method="POST">@csrf<button class="button button-secondary" type="submit">Log Out</button></form>

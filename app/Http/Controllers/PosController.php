@@ -342,6 +342,7 @@ class PosController extends Controller
         return response()->json([
             'message' => 'Checkout completed.',
             'sale_id' => $sale->id,
+            'receipt_url' => route('sales.show', $sale),
             'cart' => $this->cart(),
         ]);
     }

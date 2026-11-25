@@ -395,6 +395,11 @@
                     document.getElementById('verification-panel').hidden = true;
                     render(result.cart);
                     show(result.message + ' Sale #' + result.sale_id);
+                    const receiptLink = document.createElement('a');
+                    receiptLink.href = result.receipt_url;
+                    receiptLink.textContent = ' View / Print Receipt';
+                    receiptLink.style.marginLeft = '8px';
+                    toast.append(receiptLink);
                     beep();
                 } catch (error) {
                     show(error.message, true);

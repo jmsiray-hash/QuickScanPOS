@@ -76,7 +76,12 @@
             function render() {
                 body.innerHTML = cart.items.length ? cart.items.map(item => `
                     <tr>
-                        <td data-label="Product">${escapeHtml(item.name)}<br><small>${escapeHtml(item.code)}</small></td>
+                        <td data-label="Product">
+                            <div class="shop-cart-product">
+                                ${item.image_url ? `<img class="shop-product-image" src="${escapeHtml(item.image_url)}" alt="${escapeHtml(item.name)}">` : '<span class="shop-product-image-placeholder">No photo</span>'}
+                                <span>${escapeHtml(item.name)}<br><small>${escapeHtml(item.code)}</small></span>
+                            </div>
+                        </td>
                         <td data-label="Unit price">${money(item.price)}</td>
                         <td data-label="Quantity"><input class="shop-quantity" data-id="${item.id}" type="number" min="1" max="${item.stock_quantity}" value="${item.qty}" ${editable ? '' : 'disabled'} aria-label="Quantity for ${escapeHtml(item.name)}"></td>
                         <td data-label="Item total">${money(item.line_total)}</td>
@@ -146,6 +151,9 @@
     </script>
     <style>
         .shop-cart { max-width:980px; margin:auto; }
+        .shop-cart-product { align-items:center; display:flex; gap:12px; min-width:190px; }
+        .shop-product-image,.shop-product-image-placeholder { background:#f1f5f9; border:1px solid #dbe5e3; border-radius:6px; flex:none; height:64px; object-fit:cover; width:64px; }
+        .shop-product-image-placeholder { align-items:center; color:#64748b; display:flex; font-size:.65rem; justify-content:center; text-align:center; }
         .cart-token { color:#64748b; font-size:.85rem; overflow-wrap:anywhere; }
         .cart-summary { display:flex; flex-wrap:wrap; gap:28px; font-size:1.15rem; }
         .shop-quantity { width:84px; border:1px solid #94a3b8; border-radius:5px; font:inherit; padding:8px; }
@@ -161,6 +169,7 @@
             .shop-cart tbody td { border:0; display:block; min-width:0; overflow-wrap:anywhere; padding:8px; text-align:left; }
             .shop-cart tbody td::before { color:#64748b; content:attr(data-label); display:block; font-size:.72rem; font-weight:700; margin-bottom:3px; text-transform:uppercase; }
             .shop-cart tbody td:first-child,.shop-cart tbody td:last-child { grid-column:1 / -1; }
+            .shop-cart-product { min-width:0; }
             .shop-cart tbody td:last-child .button { width:100%; }
             .shop-quantity { max-width:100%; width:100%; }
             .cart-summary { background:#f0fdfa; border-radius:10px; display:grid; font-size:1rem; gap:0 16px; grid-template-columns:1fr 1fr; margin:14px 0; padding:8px 14px; }

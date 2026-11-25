@@ -24,9 +24,16 @@ After registering a product, select **Print QR** from the Products list (or **Pr
 
 The product camera scanner, customer camera scanner, cashier phone scanner, QR codes, and printed-number OCR use CDN scripts and need an internet connection. Phone camera access requires HTTPS (or localhost). The cashier phone connects online by scanning the verification QR shown by the cashier POS; Bluetooth pairing is not required.
 
+## Inventory, Completed Sales, and Receipts
+
+- **Products** is the inventory list. Use the search field to find a product by name, category, or barcode; filter to low stock (1–5 units) or out of stock. The summary counts active products and their on-hand units. Select **Edit / Restock** to update quantities or product details.
+- Successful checkout deducts stock and saves a sale with a snapshot of each sold product's name, barcode, quantity, and price.
+- Open **Sales Reports** to select a date range and review revenue, transaction count, units sold, top-selling items, and each completed transaction. Reports default to today.
+- Select **View receipt** in the transaction list, or the receipt link shown after checkout, to view and print a receipt. Sold-item snapshots remain available if a product is renamed or later removed.
+
 When printing the store-entry QR, use the **Phone-accessible store URL** field. A QR created while the cashier browser is at `localhost` or `127.0.0.1` points back to that device, not the phone. Paste the VS Code forwarded HTTPS URL with `/shop` at the end; camera access on phones requires HTTPS.
 
-On **Products → Register Product**, **Connect Phone Online** creates a temporary QR session. Scan it with the phone to open the mobile scanner; a barcode or OCR/manual code is sent back to the product form. The session expires after five minutes and can be used once. The QR initially uses the address currently open in the cashier's browser. For a phone on the same Wi-Fi, edit **URL the phone can reach** to use the cashier computer's LAN IP and the same port/path if needed. The web server must accept connections from the phone; camera scanning on a phone requires HTTPS. `localhost` and `127.0.0.1` on the QR are not the cashier computer when opened from another device.
+On **Products → Register Product**, use **Save & Register Next** to save an item to the shared product inventory, clear the form, and keep the cashier scanner ready for another item. The camera scanner pauses after a read and resumes after saving, preventing one label from being repeatedly added. **Connect Phone Online** creates a temporary QR session; scan it with the phone to open the mobile scanner, optionally take a product photo, then send multiple barcode or OCR/manual codes to the cashier form. The photo travels with its scanned code and is saved with the product. Customers see the saved product photo next to the name and price in their Scan & Go cart. The session expires after five minutes. Its QR initially uses the address currently open in the cashier's browser. For a phone on the same Wi-Fi, edit **URL the phone can reach** to use the cashier computer's LAN IP and the same port/path if needed. The web server must accept connections from the phone; camera scanning on a phone requires HTTPS. `localhost` and `127.0.0.1` on the QR are not the cashier computer when opened from another device.
 
 ## Local Smartphone Testing over an HTTPS Tunnel
 
@@ -70,12 +77,12 @@ Shopping carts expire after two hours. Product availability is checked while add
 
 ## Online Phone Scanning
 
-- On **Products → Register Product**, select **Connect Phone Online** to display a one-time QR. The phone opens the mobile scanner and submits the scanned product code to the form.
+- On **Products → Register Product**, select **Connect Phone Online** to display a reusable, five-minute QR session. The phone stays on the mobile scanner and submits each scanned product code to the cashier form; the cashier page restores the session when **Save & Register Next** opens a fresh form.
 - On **POS Checkout**, scan the customer's final QR using the POS camera or enter its `CART-` code, review and edit the imported items, then scan the displayed phone-check QR with the cashier phone. **Connect Cashier Phone** can regenerate it when needed.
 - Scan the verification QR with the cashier's phone. The mobile check page is online and scans each physical item against the expected cart.
 - On the Products list, choose **Print QR** to display a product QR that encodes the same code.
 - Cashier edits to a customer cart reset its verification progress. All pieces must be checked again before the POS enables checkout.
-- The mobile camera scanner has a 1.2-second cooldown. Manual code entry is available if camera access or OCR is unavailable.
+- The mobile camera scanner ignores repeat decodes of the same code for 1.2 seconds while accepting different items immediately. Manual code entry is available if camera access or OCR is unavailable.
 
 ## Routes
 
@@ -90,6 +97,8 @@ GET    /pos
 POST   /pos/scan-item
 POST   /pos/cart/update
 POST   /pos/checkout
+GET    /sales
+GET    /sales/{sale}
 GET    /pos/import-cart/{token}
 POST   /pos/verification
 GET    /pos/verify/{code}

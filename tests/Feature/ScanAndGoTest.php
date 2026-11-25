@@ -7,6 +7,8 @@ use App\Models\CustomerCartItem;
 use App\Models\Product;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 
 class ScanAndGoTest extends TestCase
 {
@@ -110,18 +112,80 @@ class ScanAndGoTest extends TestCase
         $this->get(route('products.phone-scan.mobile', $token))
             ->assertOk()
             ->assertSee('Phone Product Scanner')
-            ->assertSee('Read Printed Number / Can Code');
+            ->assertSee('Read Printed Number / Can Code')
+            ->assertSee('Scan product barcodes one after another')
+            ->assertSee('Take a photo of this product');
 
-        $this->postJson(route('products.phone-scan.submit', $token), ['code' => ' phone-code-77 '])
+        $phonePhoto = UploadedFile::fake()->image('phone-photo.png', 10, 10);
+        $photoData = 'data:image/png;base64,'.base64_encode(file_get_contents($phonePhoto->getRealPath()));
+        $this->postJson(route('products.phone-scan.submit', $token), [
+            'code' => ' phone-code-77 ',
+            'photo' => $photoData,
+        ])
             ->assertOk();
 
         $this->actingAs($cashier);
         $this->getJson(route('products.phone-scan.result', $token))
             ->assertOk()
             ->assertJsonPath('status', 'complete')
-            ->assertJsonPath('code', 'PHONE-CODE-77');
+            ->assertJsonPath('code', 'PHONE-CODE-77')
+            ->assertJsonPath('photo_data', $photoData);
 
-        $this->getJson(route('products.phone-scan.result', $token))->assertGone();
+        $this->getJson(route('products.phone-scan.result', $token))
+            ->assertOk()
+            ->assertJsonPath('status', 'waiting');
+        $this->postJson(route('products.phone-scan.submit', $token), ['code' => 'PHONE-CODE-78'])
+            ->assertOk();
+        $this->getJson(route('products.phone-scan.result', $token))
+            ->assertOk()
+            ->assertJsonPath('code', 'PHONE-CODE-78');
+    }
+
+    public function test_product_registration_can_save_and_open_a_fresh_form_for_the_next_item(): void
+    {
+        $this->post(route('products.store'), [
+            'barcode' => '  CONTINUOUS-ITEM-1 ',
+            'name' => 'First continuous item',
+            'category' => 'Grocery',
+            'cost_price' => 1,
+            'selling_price' => 2,
+            'stock_quantity' => 10,
+            'is_active' => 1,
+            'continue' => 1,
+        ])->assertRedirect(route('products.create'));
+
+        $this->assertDatabaseHas('products', [
+            'barcode' => 'CONTINUOUS-ITEM-1',
+            'name' => 'First continuous item',
+            'stock_quantity' => 10,
+        ]);
+        $this->get(route('products.create'))
+            ->assertOk()
+            ->assertSee('Save &amp; Register Next', false)
+            ->assertSee('Product saved. Scan or enter the next item.');
+    }
+
+    public function test_continuous_product_registration_saves_without_leaving_the_form(): void
+    {
+        $this->postJson(route('products.store'), [
+            'barcode' => 'CONTINUOUS-ITEM-2',
+            'name' => 'Second continuous item',
+            'category' => 'Grocery',
+            'cost_price' => 1,
+            'selling_price' => 2,
+            'stock_quantity' => 4,
+            'is_active' => 1,
+            'continue' => 1,
+        ])
+            ->assertCreated()
+            ->assertJsonPath('message', 'Product saved. Scan or enter the next item.')
+            ->assertJsonPath('product.barcode', 'CONTINUOUS-ITEM-2');
+
+        $this->assertDatabaseHas('products', [
+            'barcode' => 'CONTINUOUS-ITEM-2',
+            'name' => 'Second continuous item',
+            'stock_quantity' => 4,
+        ]);
     }
 
     public function test_registered_product_has_a_printable_qr_encoded_with_its_product_code(): void
@@ -137,6 +201,38 @@ class ScanAndGoTest extends TestCase
         $this->get(route('products.index'))
             ->assertOk()
             ->assertSee(route('products.qr', $product), false);
+    }
+
+    public function test_product_photo_is_saved_and_shown_in_the_customer_cart(): void
+    {
+        Storage::fake('public');
+
+        $this->post(route('products.store'), [
+            'barcode' => 'PHOTO-APPLE-1',
+            'name' => 'Fresh Apples',
+            'category' => 'Produce',
+            'image' => UploadedFile::fake()->image('apples.jpg', 10, 10),
+            'cost_price' => 1,
+            'selling_price' => 2.5,
+            'stock_quantity' => 5,
+            'is_active' => 1,
+        ])->assertRedirect(route('products.index'));
+
+        $product = Product::query()->where('barcode', 'PHOTO-APPLE-1')->firstOrFail();
+        $this->assertNotNull($product->image_path);
+        Storage::disk('public')->assertExists($product->image_path);
+        $this->get(route('products.image', $product))
+            ->assertOk()
+            ->assertHeader('content-type', 'image/jpeg');
+
+        $this->post(route('shop.start'), ['customer_name' => 'Photo Shopper'])->assertRedirect();
+        $cart = CustomerCart::query()->where('customer_name', 'Photo Shopper')->firstOrFail();
+        $this->postJson(route('shop.cart.scan', $cart->token), ['code' => $product->barcode])
+            ->assertOk()
+            ->assertJsonPath('cart.items.0.image_url', route('products.image', $product));
+        $this->get(route('shop.cart', $cart->token))
+            ->assertOk()
+            ->assertSee('shop-product-image');
     }
 
     public function test_customer_can_scan_adjust_and_finalize_a_separate_cart(): void
@@ -393,9 +489,18 @@ class ScanAndGoTest extends TestCase
         $this->postJson(route('pos.scan'), ['barcode' => $product->barcode])->assertOk();
         $product->update(['selling_price' => 7.00]);
 
-        $this->postJson(route('pos.checkout'))
+        $checkout = $this->postJson(route('pos.checkout'))
             ->assertOk()
             ->assertJsonPath('message', 'Checkout completed.');
+
+        $checkout->assertJsonPath(
+            'receipt_url',
+            route('sales.show', $checkout->json('sale_id')),
+        );
+        $this->get($checkout->json('receipt_url'))
+            ->assertOk()
+            ->assertSee($product->name)
+            ->assertSee($product->barcode);
 
         $this->assertSame(2, $product->fresh()->stock_quantity);
         $this->assertDatabaseHas('sales', [
