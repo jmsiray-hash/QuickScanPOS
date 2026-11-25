@@ -174,9 +174,16 @@ class PosController extends Controller
         $validated = $request->validate([
             'code' => ['required', 'string', 'max:100'],
         ]);
-        $code = strtoupper(trim($validated['code']));
+        $code = $this->normalizeScanCode($validated['code']);
         if (str_starts_with($code, 'CART-')) {
             return $this->importCart($code);
+        }
+        if (str_starts_with($code, 'VERIFY-')) {
+            $cart = CustomerCart::query()
+                ->where('verification_code', $code)
+                ->firstOrFail();
+
+            return $this->importCart($cart->token);
         }
 
         $product = Product::query()->whereRaw('UPPER(barcode) = ?', [$code])->first();
@@ -403,6 +410,9 @@ class PosController extends Controller
         $subtotal = collect($items)->sum(
             static fn (array $item): float => (int) $item['quantity'] * (float) $item['unit_price'],
         );
+        $customerCart = session('customer_cart_id')
+            ? CustomerCart::query()->find(session('customer_cart_id'))
+            : null;
 
         return [
             'items' => $items,
@@ -411,8 +421,39 @@ class PosController extends Controller
             'discount' => 0,
             'total' => round($subtotal, 2),
             'customer_cart_token' => session('customer_cart_token'),
+            'customer_name' => $customerCart?->customer_name,
+            'is_verified' => (bool) ($customerCart?->is_verified ?? false),
             'verification_code' => session('pos_verification_code'),
         ];
+    }
+
+    private function normalizeScanCode(string $rawCode): string
+    {
+        $code = strtoupper(trim($rawCode));
+        if (str_starts_with($code, 'CART-') || str_starts_with($code, 'VERIFY-')) {
+            return $code;
+        }
+
+        $parts = parse_url(trim($rawCode));
+        if (is_array($parts)) {
+            parse_str((string) ($parts['query'] ?? ''), $query);
+            $candidates = array_merge(
+                array_values(array_filter([
+                    $query['cart'] ?? null,
+                    $query['token'] ?? null,
+                ])),
+                array_values(array_filter(explode('/', trim((string) ($parts['path'] ?? ''), '/')))),
+            );
+
+            foreach (array_reverse($candidates) as $candidate) {
+                $candidate = strtoupper(urldecode((string) $candidate));
+                if (str_starts_with($candidate, 'CART-') || str_starts_with($candidate, 'VERIFY-')) {
+                    return $candidate;
+                }
+            }
+        }
+
+        return $code;
     }
 
     private function newCode(string $prefix): string

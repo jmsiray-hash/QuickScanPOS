@@ -144,13 +144,23 @@ class ShopController extends Controller
             if (! $lockedCart->items()->exists()) {
                 abort(422, 'Add at least one item before finishing.');
             }
-            $lockedCart->update(['status' => 'ready_for_checkout']);
+
+            $lockedCart->update([
+                'verification_code' => $this->newVerificationCode(),
+                'is_verified' => false,
+                'verified_at' => null,
+                'status' => 'ready_for_checkout',
+            ]);
         });
+
+        $cart = $cart->fresh();
 
         return response()->json([
             'message' => 'Your cashier QR is ready.',
             'qr_value' => $cart->token,
-            'cart' => $this->cartData($cart->fresh()),
+            'qr_url' => route('pos.verify', $cart->verification_code),
+            'verification_url' => route('pos.verify', $cart->verification_code),
+            'cart' => $this->cartData($cart),
         ]);
     }
 
@@ -207,10 +217,14 @@ class ShopController extends Controller
 
         return [
             'token' => $cart->token,
+            'cart_url' => route('shop.cart', $cart->token),
             'customer_name' => $cart->customer_name,
             'status' => $cart->status,
             'is_verified' => $cart->is_verified,
             'verification_code' => $cart->verification_code,
+            'verification_url' => $cart->verification_code
+                ? route('pos.verify', $cart->verification_code)
+                : null,
             'items' => $items,
             'total_pieces' => $totalPieces,
             'grand_total' => $grandTotal,
@@ -222,6 +236,15 @@ class ShopController extends Controller
         do {
             $code = $prefix.Str::upper(Str::random(12));
         } while (CustomerCart::query()->where('token', $code)->exists());
+
+        return $code;
+    }
+
+    private function newVerificationCode(): string
+    {
+        do {
+            $code = 'VERIFY-'.Str::upper(Str::random(12));
+        } while (CustomerCart::query()->where('verification_code', $code)->exists());
 
         return $code;
     }

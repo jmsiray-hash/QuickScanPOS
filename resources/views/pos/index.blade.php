@@ -10,7 +10,8 @@
             <input id="pos-barcode" type="text" placeholder="Customer CART- code or product barcode" autocomplete="off" autofocus>
             <button class="button button-secondary" id="focus-pos-scanner" type="button">Focus Scanner</button>
             <button class="button" id="add-pos-code" type="button">Add Product / Load Customer Cart</button>
-            <button class="button button-secondary" id="scan-item" type="button">Scan Customer QR / Product</button>
+            <button class="button" id="scan-customer-qr" type="button">Scan Customer QR</button>
+            <button class="button button-secondary" id="scan-item" type="button">Scan Product Barcode</button>
         </div>
         <div class="row-actions">
             <a class="button button-secondary" href="{{ route('pos.store-qr') }}">Store Entry QR</a>
@@ -18,10 +19,11 @@
         </div>
     </div>
 
-    <p class="cashier-flow-hint">Scan the customer's CART QR here to load their items. To check the physical items with a cashier phone, choose <strong>Connect Cashier Phone</strong> and scan the new QR with that phone. It works online over HTTPS; no Bluetooth pairing is needed.</p>
+    <p class="cashier-flow-hint">Scan the customer's final QR here to load their items. The same QR can also be scanned by the cashier phone to open item checking. Use <strong>Connect Cashier Phone</strong> to create a fresh QR if needed. It works online over HTTPS; no Bluetooth pairing is needed.</p>
 
     <div id="pos-scanner" hidden>
         <div id="pos-reader"></div>
+        <p id="pos-scan-mode" class="field-hint">Point the camera at a code.</p>
         <button class="button button-secondary" id="stop-pos-scanner" type="button">Close Camera</button>
     </div>
     <p id="pos-cart-source" class="field-hint"></p>
@@ -58,6 +60,7 @@
             let lastScannedAt = 0;
             let isVerified = false;
             let currentCartToken = null;
+            let currentCustomerName = null;
             let pollTimer = null;
             let polledStatusUrl = null;
 
@@ -140,6 +143,10 @@
                 `).join('') : '<tr><td colspan="5">Cart is empty. Scan a product or import a CART- code.</td></tr>';
                 document.getElementById('cart-summary').innerHTML = `<p><strong>Subtotal:</strong> ${money(cart.subtotal)} &nbsp; <strong>Total:</strong> ${money(cart.total)}</p>`;
                 currentCartToken = cart.customer_cart_token || currentCartToken;
+                currentCustomerName = cart.customer_name || currentCustomerName;
+                if (Object.prototype.hasOwnProperty.call(cart, 'is_verified')) {
+                    isVerified = cart.is_verified === true;
+                }
                 document.querySelectorAll('.pos-quantity').forEach(input => {
                     input.addEventListener('change', () => update(input.dataset.id, Number(input.value)));
                 });
@@ -147,7 +154,9 @@
                     button.addEventListener('click', () => update(button.dataset.id, 0));
                 });
                 const source = document.getElementById('pos-cart-source');
-                source.textContent = currentCartToken ? 'Customer cart: ' + currentCartToken : '';
+                source.textContent = currentCartToken
+                    ? (currentCustomerName ? 'Customer: ' + currentCustomerName + ' · ' : 'Customer cart: ') + currentCartToken
+                    : '';
                 updatePaymentState();
                 if (cart.verification_code && !pollTimer) {
                     const code = cart.verification_code;
@@ -160,17 +169,47 @@
                     );
                 }
             }
+            function cartReferenceFromScan(rawCode) {
+                const raw = String(rawCode || '').trim();
+                const normalized = raw.toUpperCase();
+                if (normalized.startsWith('CART-')) return { cartToken: normalized, verificationCode: null };
+                if (normalized.startsWith('VERIFY-')) return { cartToken: null, verificationCode: normalized };
+
+                try {
+                    const url = new URL(raw);
+                    const candidates = [
+                        url.searchParams.get('cart'),
+                        url.searchParams.get('token'),
+                        ...url.pathname.split('/').filter(Boolean).reverse(),
+                    ];
+                    const values = candidates
+                        .map(value => String(value || '').trim().toUpperCase())
+                        .filter(Boolean);
+                    return {
+                        cartToken: values.find(value => value.startsWith('CART-')) || null,
+                        verificationCode: values.find(value => value.startsWith('VERIFY-')) || null,
+                    };
+                } catch (error) {
+                    return { cartToken: null, verificationCode: null };
+                }
+            }
             async function scan(rawCode) {
-                const code = String(rawCode || '').trim().toUpperCase();
+                const reference = cartReferenceFromScan(rawCode);
+                const cartToken = reference.cartToken;
+                const verificationCode = reference.verificationCode;
+                const code = cartToken || verificationCode || String(rawCode || '').trim().toUpperCase();
                 barcodeInput.value = '';
                 const now = Date.now();
                 if (!code || (code === lastCode && now - lastScannedAt < 800)) return;
                 lastCode = code;
                 lastScannedAt = now;
                 try {
-                    if (code.startsWith('CART-')) {
-                        const result = await request(importUrl.replace('CART_TOKEN', encodeURIComponent(code)));
+                    if (cartToken || verificationCode) {
+                        const result = cartToken
+                            ? await request(importUrl.replace('CART_TOKEN', encodeURIComponent(cartToken)))
+                            : await request('{{ route('pos.scan') }}', 'POST', { code: verificationCode });
                         currentCartToken = result.customer_cart_token;
+                        currentCustomerName = result.customer_name || null;
                         isVerified = result.is_verified === true;
                         document.getElementById('pos-cart-source').textContent = 'Customer: ' + result.customer_name + ' · ' + result.customer_cart_token;
                         render(result.cart);
@@ -270,28 +309,26 @@
                 barcodeInput.value = '';
                 scan(code);
             });
-            document.getElementById('scan-item').addEventListener('click', async () => {
+            async function startCamera(formats, modeMessage) {
                 document.getElementById('pos-scanner').hidden = false;
+                document.getElementById('pos-scan-mode').textContent = modeMessage;
                 try {
                     if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
                         throw new Error('Camera access requires HTTPS. Open this page using the forwarded HTTPS URL or localhost.');
                     }
                     if (!window.Html5Qrcode) throw new Error('Camera scanner library did not load.');
+                    if (scanner) {
+                        await scanner.stop();
+                        scanner.clear();
+                        scanner = null;
+                    }
                     scanner = new Html5Qrcode('pos-reader');
                     await scanner.start(
                         { facingMode: 'environment' },
                         {
                             fps: 10,
                             qrbox: { width: 280, height: 120 },
-                            formatsToSupport: [
-                                Html5QrcodeSupportedFormats.EAN_13,
-                                Html5QrcodeSupportedFormats.EAN_8,
-                                Html5QrcodeSupportedFormats.UPC_A,
-                                Html5QrcodeSupportedFormats.UPC_E,
-                                Html5QrcodeSupportedFormats.CODE_128,
-                                Html5QrcodeSupportedFormats.CODE_39,
-                                Html5QrcodeSupportedFormats.QR_CODE,
-                            ],
+                            formatsToSupport: formats,
                         },
                         code => scan(code),
                         () => {},
@@ -299,7 +336,23 @@
                 } catch (error) {
                     show(cameraErrorMessage(error), true);
                 }
-            });
+            }
+            document.getElementById('scan-customer-qr').addEventListener('click', () => startCamera(
+                [Html5QrcodeSupportedFormats.QR_CODE],
+                'Point the camera at the customer QR to load the order on this cashier screen.',
+            ));
+            document.getElementById('scan-item').addEventListener('click', () => startCamera(
+                [
+                    Html5QrcodeSupportedFormats.EAN_13,
+                    Html5QrcodeSupportedFormats.EAN_8,
+                    Html5QrcodeSupportedFormats.UPC_A,
+                    Html5QrcodeSupportedFormats.UPC_E,
+                    Html5QrcodeSupportedFormats.CODE_128,
+                    Html5QrcodeSupportedFormats.CODE_39,
+                    Html5QrcodeSupportedFormats.QR_CODE,
+                ],
+                'Point the camera at a product barcode or QR code.',
+            ));
             document.getElementById('stop-pos-scanner').addEventListener('click', async () => {
                 if (!scanner) return;
                 try {
@@ -307,6 +360,7 @@
                     scanner.clear();
                     scanner = null;
                     document.getElementById('pos-scanner').hidden = true;
+                    document.getElementById('pos-scan-mode').textContent = '';
                 } catch (error) {
                     show(error.message || 'Could not stop the camera.', true);
                 }
@@ -333,6 +387,7 @@
                 try {
                     const result = await request('{{ route('pos.checkout') }}', 'POST');
                     currentCartToken = null;
+                    currentCustomerName = null;
                     isVerified = false;
                     if (pollTimer) window.clearInterval(pollTimer);
                     pollTimer = null;

@@ -55,15 +55,15 @@ The scanner uses the browser camera API through `html5-qrcode` (and `getUserMedi
 2. The customer scans it, opens `/shop`, enters a name, and taps **Start Shopping**.
 3. On the cart page, use **Scan Barcode with Camera**, **Read Printed Number / Can Code**, or type a code and tap **Add Code**. OCR puts the recognized code in the input for review before adding it.
 4. On the phone-friendly cart page, change quantities or tap **Remove item** as needed. The page shows **Total Pieces** and **Running Grand Total**.
-5. Tap **Finish & Generate Cashier QR**. The resulting QR contains the `CART-...` cart token.
+5. Tap **Finish & Generate Cashier QR**. The resulting QR opens the cashier-phone item scanner. The cashier POS can scan that same QR to load the cart, or the cart can be loaded by entering its displayed `CART-...` code.
 
 Shopping carts expire after two hours. Product availability is checked while adding items, when the cashier imports the cart, and again during checkout.
 
 ## Cashier Import, Verification, and Payment
 
-1. At `/pos`, scan the customer's cart QR with the cashier screen camera or enter its `CART-...` code. The POS loads that cart without adding a sale.
+1. At `/pos`, scan the customer's final QR with the cashier screen camera or enter its `CART-...` code. The POS loads that cart without adding a sale and automatically displays the phone-check QR.
 2. Before payment, the cashier may edit quantities, remove items, or scan additional products in the POS cart. Any change resets item checks.
-3. Tap **Connect Cashier Phone**. Scan the displayed verification QR with the cashier's phone; it opens the online item-check screen.
+3. Scan the displayed verification QR with the cashier's phone; it opens the online item-check screen. **Connect Cashier Phone** can regenerate it when needed.
 4. On the phone, scan each physical item's barcode, use OCR for a printed number, enter a code manually, or tap **Check one**. Unknown, unexpected, and over-quantity scans show a mismatch warning. The phone refreshes its expected items when the cashier edits the cart.
 5. Once every expected piece is checked, the mobile page and cashier POS show **SCANNED AND CHECKED ITEM - READY FOR PAYMENT**. The cashier POS polls for this state, and checkout stays disabled until verification is complete.
 6. Tap **Complete Checkout**. Successful payment creates the sale, deducts stock, and marks the customer cart `paid` in the same database transaction. A paid cart cannot be imported again.
@@ -71,7 +71,7 @@ Shopping carts expire after two hours. Product availability is checked while add
 ## Online Phone Scanning
 
 - On **Products → Register Product**, select **Connect Phone Online** to display a one-time QR. The phone opens the mobile scanner and submits the scanned product code to the form.
-- On **POS Checkout**, scan the customer's `CART-` QR using the POS camera or enter its code, review and edit the imported items, then select **Connect Cashier Phone**.
+- On **POS Checkout**, scan the customer's final QR using the POS camera or enter its `CART-` code, review and edit the imported items, then scan the displayed phone-check QR with the cashier phone. **Connect Cashier Phone** can regenerate it when needed.
 - Scan the verification QR with the cashier's phone. The mobile check page is online and scans each physical item against the expected cart.
 - On the Products list, choose **Print QR** to display a product QR that encodes the same code.
 - Cashier edits to a customer cart reset its verification progress. All pieces must be checked again before the POS enables checkout.

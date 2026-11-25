@@ -29,6 +29,7 @@
             <h3>Show this QR code to the cashier</h3>
             <div id="cashier-cart-qr" aria-label="Cashier cart QR code"></div>
             <p>Cart: <strong id="cashier-cart-token"></strong></p>
+            <p>The same QR works on the cashier POS to load your cart and on the cashier phone to open the item scanner.</p>
             <p>Keep this page open until checkout is complete.</p>
         </section>
     </section>
@@ -118,12 +119,12 @@
                 }
             });
 
-            function showQr(token) {
+            function showQr(token, cartUrl = cart.verification_url || cart.cart_url || token) {
                 document.getElementById('cashier-qr-panel').hidden = false;
                 document.getElementById('cashier-cart-token').textContent = token;
                 const qr = document.getElementById('cashier-cart-qr');
                 qr.replaceChildren();
-                if (window.QRCode) new QRCode(qr, { text: token, width: 220, height: 220 });
+                if (window.QRCode) new QRCode(qr, { text: cartUrl, width: 220, height: 220 });
                 else showMessage('QR library could not load. Give the cashier this cart code: ' + token, true);
             }
 
@@ -132,7 +133,7 @@
                     const result = await send(finalizeUrl, 'POST');
                     cart = result.cart;
                     render();
-                    showQr(result.qr_value);
+                    showQr(result.qr_value, result.verification_url || result.qr_url);
                     showMessage(result.message);
                 } catch (error) {
                     showMessage(error.message, true);

@@ -52,7 +52,8 @@ class ScanAndGoTest extends TestCase
             ->assertOk()
             ->assertSee('autocomplete="off"', false)
             ->assertSee('Focus Scanner')
-            ->assertSee('Scan Customer QR / Product')
+            ->assertSee('Scan Customer QR')
+            ->assertSee('Scan Product Barcode')
             ->assertSee('Connect Cashier Phone')
             ->assertSee('no Bluetooth pairing')
             ->assertSee('Camera access requires HTTPS')
@@ -188,9 +189,21 @@ class ScanAndGoTest extends TestCase
         $this->postJson(route('shop.cart.finalize', $cart->token))
             ->assertOk()
             ->assertJsonPath('cart.status', 'ready_for_checkout')
-            ->assertJsonPath('qr_value', $cart->token);
+            ->assertJsonPath('qr_value', $cart->token)
+            ->assertJsonPath('qr_url', route('pos.verify', $cart->fresh()->verification_code))
+            ->assertJsonPath('cart.verification_url', route('pos.verify', $cart->fresh()->verification_code));
 
         $this->assertSame('ready_for_checkout', $cart->fresh()->status);
+        $this->assertNotNull($cart->fresh()->verification_code);
+
+        $this->getJson(route('pos.import-cart', $cart->token))
+            ->assertOk()
+            ->assertJsonPath('verification_code', $cart->fresh()->verification_code)
+            ->assertJsonPath('cart.is_verified', false);
+
+        $this->get(route('pos.verify', $cart->fresh()->verification_code))
+            ->assertOk()
+            ->assertSee('Taylor Shopper');
     }
 
     public function test_cashier_can_verify_every_piece_and_checkout_the_imported_cart(): void
@@ -270,6 +283,31 @@ class ScanAndGoTest extends TestCase
         ]);
         $this->getJson(route('pos.import-cart', $cart->token))->assertUnprocessable();
         $this->assertSame(5, $unexpectedProduct->fresh()->stock_quantity);
+    }
+
+    public function test_cashier_can_import_a_customer_cart_from_its_qr_url(): void
+    {
+        $product = $this->product('QR-CART-URL-1', 2, 11.00);
+        $cart = CustomerCart::create([
+            'token' => 'CART-URL-IMPORT1',
+            'verification_code' => 'VERIFY-URL-IMPORT1',
+            'customer_name' => 'URL Shopper',
+            'status' => 'ready_for_checkout',
+            'expires_at' => now()->addHour(),
+        ]);
+        CustomerCartItem::create([
+            'customer_cart_id' => $cart->id,
+            'product_id' => $product->id,
+            'qty' => 1,
+            'price' => 11.00,
+        ]);
+
+        $this->postJson(route('pos.scan'), [
+            'code' => route('pos.verify', $cart->fresh()->verification_code),
+        ])
+            ->assertOk()
+            ->assertJsonPath('customer_cart_token', $cart->token)
+            ->assertJsonPath('cart.items.0.barcode', $product->barcode);
     }
 
     public function test_customer_cart_checkout_requires_mobile_item_verification(): void
