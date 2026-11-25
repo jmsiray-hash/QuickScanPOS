@@ -52,6 +52,9 @@ class ScanAndGoTest extends TestCase
             ->assertOk()
             ->assertSee('autocomplete="off"', false)
             ->assertSee('Focus Scanner')
+            ->assertSee('Scan Customer QR / Product')
+            ->assertSee('Connect Cashier Phone')
+            ->assertSee('no Bluetooth pairing')
             ->assertSee('Camera access requires HTTPS')
             ->assertSee('Camera permission was denied');
         $this->get(route('products.create'))
@@ -59,14 +62,14 @@ class ScanAndGoTest extends TestCase
             ->assertSee('Barcode / Printed Product Code')
             ->assertSee('autofocus', false)
             ->assertSee('Focus Scanner')
-            ->assertSee('Connect Phone')
-            ->assertSee('Bluetooth HID')
+            ->assertSee('Connect Phone Online')
+            ->assertDontSee('Bluetooth HID')
             ->assertSee('Camera permission was denied')
-            ->assertSee('Scan with Phone');
+            ->assertSee('Connect Phone Online');
         $this->get(route('pos.index'))
             ->assertOk()
-            ->assertSee('Connect Phone')
-            ->assertSee('Bluetooth HID');
+            ->assertSee('Cashier Phone Item Check')
+            ->assertDontSee('Bluetooth HID');
     }
 
     public function test_forwarded_https_host_is_used_for_urls_in_tunnel_requests(): void
@@ -92,7 +95,7 @@ class ScanAndGoTest extends TestCase
             ->assertSee('value="https://pos-example.devtunnels.ms/shop"', false);
     }
 
-    public function test_cashier_can_scan_a_product_code_with_a_paired_phone(): void
+    public function test_cashier_can_scan_a_product_code_with_a_phone_online(): void
     {
         $cashier = User::factory()->create();
         $this->actingAs($cashier);
@@ -150,6 +153,9 @@ class ScanAndGoTest extends TestCase
             ->assertOk()
             ->assertSee('Total Pieces')
             ->assertSee('Running Grand Total')
+            ->assertSee('Remove item')
+            ->assertSee('data-label="Quantity"', false)
+            ->assertSee('grid-template-columns:repeat(2', false)
             ->assertSee('Read Printed Number / Can Code')
             ->assertSee('Camera access requires HTTPS')
             ->assertSee('X-CSRF-TOKEN');
@@ -170,6 +176,14 @@ class ScanAndGoTest extends TestCase
             ->assertOk()
             ->assertJsonPath('cart.total_pieces', 1)
             ->assertJsonPath('cart.grand_total', 12.5);
+
+        $this->putJson(route('shop.cart.item.update', [$cart->token, $item->id]), ['qty' => 0])
+            ->assertOk()
+            ->assertJsonPath('cart.total_pieces', 0);
+        $this->assertDatabaseMissing('customer_cart_items', ['id' => $item->id]);
+        $this->postJson(route('shop.cart.scan', $cart->token), ['code' => 'CAN-PRINTED-77'])
+            ->assertOk()
+            ->assertJsonPath('cart.total_pieces', 1);
 
         $this->postJson(route('shop.cart.finalize', $cart->token))
             ->assertOk()
@@ -209,6 +223,8 @@ class ScanAndGoTest extends TestCase
         $this->get(route('pos.verify', $verificationCode))
             ->assertOk()
             ->assertSee('Total Expected Pieces')
+            ->assertSee('CASHIER PHONE')
+            ->assertSee('statusTimer')
             ->assertSee('Morgan Shopper');
 
         $this->postJson(route('pos.verify.check', $verificationCode), ['code' => 'NOT-IN-CART'])
@@ -256,7 +272,7 @@ class ScanAndGoTest extends TestCase
         $this->assertSame(5, $unexpectedProduct->fresh()->stock_quantity);
     }
 
-    public function test_cashier_can_use_manual_payment_override_without_mobile_verification(): void
+    public function test_customer_cart_checkout_requires_mobile_item_verification(): void
     {
         $product = $this->product('MANUAL-PAYMENT-1', 4, 6.00);
         $cart = CustomerCart::create([
@@ -274,11 +290,63 @@ class ScanAndGoTest extends TestCase
 
         $this->getJson(route('pos.import-cart', $cart->token))->assertOk();
         $this->postJson(route('pos.checkout'))
-            ->assertOk()
-            ->assertJsonPath('message', 'Checkout completed.');
+            ->assertUnprocessable()
+            ->assertJsonPath('message', 'Scan and verify every item with the cashier phone before checkout.');
 
-        $this->assertSame('paid', $cart->fresh()->status);
-        $this->assertSame(3, $product->fresh()->stock_quantity);
+        $this->assertSame('ready_for_checkout', $cart->fresh()->status);
+        $this->assertSame(4, $product->fresh()->stock_quantity);
+    }
+
+    public function test_cashier_cart_edits_reset_mobile_verification_before_payment(): void
+    {
+        $product = $this->product('CASHIER-EDIT-01', 5, 6.00);
+        $addedProduct = $this->product('CASHIER-EDIT-02', 5, 4.00);
+        $cart = CustomerCart::create([
+            'token' => 'CART-CASHIER-EDIT1',
+            'customer_name' => 'Edit Cart Shopper',
+            'status' => 'ready_for_checkout',
+            'expires_at' => now()->addHour(),
+        ]);
+        CustomerCartItem::create([
+            'customer_cart_id' => $cart->id,
+            'product_id' => $product->id,
+            'qty' => 2,
+            'price' => 6.00,
+        ]);
+
+        $this->postJson(route('pos.scan'), ['code' => $cart->token])->assertOk();
+        $this->postJson(route('pos.verification.create'))->assertOk();
+        $verificationCode = $cart->fresh()->verification_code;
+        $this->postJson(route('pos.verify.check', $verificationCode), ['code' => $product->barcode])
+            ->assertOk();
+
+        $this->assertSame(1, $cart->fresh()->items()->firstOrFail()->checked_qty);
+        $this->postJson(route('pos.cart.update'), [
+            'product_id' => $product->id,
+            'quantity' => 3,
+        ])->assertOk();
+
+        $cart->refresh();
+        $item = $cart->items()->where('product_id', $product->id)->firstOrFail();
+        $this->assertSame(3, $item->qty);
+        $this->assertSame(0, $item->checked_qty);
+        $this->assertFalse($item->is_checked);
+        $this->assertFalse($cart->is_verified);
+
+        $this->postJson(route('pos.scan'), ['code' => $addedProduct->barcode])->assertOk();
+        $this->assertDatabaseHas('customer_cart_items', [
+            'customer_cart_id' => $cart->id,
+            'product_id' => $addedProduct->id,
+            'qty' => 1,
+        ]);
+        $this->postJson(route('pos.cart.update'), [
+            'product_id' => $addedProduct->id,
+            'quantity' => 0,
+        ])->assertOk();
+        $this->assertDatabaseMissing('customer_cart_items', [
+            'customer_cart_id' => $cart->id,
+            'product_id' => $addedProduct->id,
+        ]);
     }
 
     public function test_direct_pos_checkout_keeps_existing_live_price_and_stock_behavior(): void

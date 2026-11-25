@@ -4,7 +4,9 @@
 
 @section('content')
     <section class="verify-page">
-        <h2>Cashier Item Verification</h2>
+        <p class="verify-eyebrow">QUICKSCANPOS · CASHIER PHONE</p>
+        <h1>Check the items</h1>
+        <p>Scan every physical product in the customer's cart. You can scan with this phone's camera or enter a product code. Checkout unlocks after all pieces match.</p>
         <p>Cart for <strong>{{ $cart->customer_name }}</strong> · {{ $cart->token }}</p>
         <div id="verify-message" class="alert" role="status" hidden></div>
         <div id="verified-banner" class="verified-banner" @if (! $cart->is_verified) hidden @endif>{{ $readyLabel }}</div>
@@ -22,7 +24,10 @@
         document.addEventListener('DOMContentLoaded', () => {
             const csrf = document.querySelector('meta[name="csrf-token"]').content;
             const checkUrl = @json(route('pos.verify.check', $cart->verification_code));
+            const statusUrl = @json(route('pos.verify-status', $cart->verification_code));
             let cart = @json($cartData);
+            let previousChecks = JSON.stringify(cart.items.map(item => [item.product_id, item.qty, item.checked_qty]));
+            let statusTimer = null;
             const body = document.getElementById('verify-items');
             const summary = document.getElementById('verify-summary');
             const message = document.getElementById('verify-message');
@@ -34,10 +39,10 @@
             function render() {
                 body.innerHTML = cart.items.map(item => `
                     <tr>
-                        <td>${escapeHtml(item.name)}<br><small>${escapeHtml(item.code)}</small></td>
-                        <td>${item.qty}</td>
-                        <td>${item.checked_qty}</td>
-                        <td><button class="button button-secondary verify-one" data-code="${escapeHtml(item.code)}" type="button" ${item.is_checked ? 'disabled' : ''}>Check one</button></td>
+                        <td data-label="Expected product">${escapeHtml(item.name)}<br><small>${escapeHtml(item.code)}</small></td>
+                        <td data-label="Expected qty">${item.qty}</td>
+                        <td data-label="Checked qty">${item.checked_qty}</td>
+                        <td data-label="Action"><button class="button button-secondary verify-one" data-code="${escapeHtml(item.code)}" type="button" ${item.is_checked ? 'disabled' : ''}>Check one</button></td>
                     </tr>
                 `).join('');
                 summary.innerHTML = `<p><strong>Total Expected Pieces:</strong> ${cart.total_expected_pieces} &nbsp; <strong>Total Checked Pieces:</strong> ${cart.total_checked_pieces}</p>`;
@@ -72,14 +77,59 @@
                 }
             }
 
+            async function refreshCart() {
+                const response = await fetch(statusUrl, { headers: { Accept: 'application/json' } });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.message || 'Could not refresh the cashier cart.');
+                const nextChecks = JSON.stringify(result.cart.items.map(item => [item.product_id, item.qty, item.checked_qty]));
+                if (nextChecks !== previousChecks) {
+                    const checksWereReset = result.cart.total_checked_pieces < cart.total_checked_pieces;
+                    cart = result.cart;
+                    previousChecks = nextChecks;
+                    render();
+                    if (checksWereReset) {
+                        message.textContent = 'The cashier updated the cart. Scan and verify all expected items again.';
+                        message.className = 'alert alert-errors';
+                        message.hidden = false;
+                    }
+                } else {
+                    cart = result.cart;
+                    banner.hidden = !cart.is_verified;
+                }
+            }
+
             document.addEventListener('pos:code-scanned', event => checkItem(event.detail.code));
             document.querySelector('.scanner-input').focus();
             render();
+            statusTimer = window.setInterval(async () => {
+                try {
+                    await refreshCart();
+                } catch (error) {
+                    message.textContent = error.message || 'Could not refresh the cashier cart.';
+                    message.className = 'alert alert-errors';
+                    message.hidden = false;
+                }
+            }, 2000);
+            window.addEventListener('pagehide', () => {
+                if (statusTimer) window.clearInterval(statusTimer);
+            });
         });
     </script>
     <style>
-        .verify-page { max-width:900px; margin:auto; }
+        .verify-page { margin:auto; max-width:720px; }
+        .verify-eyebrow { color:#0f766e; font-size:.76rem; font-weight:800; letter-spacing:.12em; }
+        .verify-page h1 { font-size:clamp(1.8rem,6vw,2.4rem); }
         .verified-banner { background:#dcfce7; border:2px solid #16a34a; border-radius:8px; color:#166534; font-size:clamp(1.1rem,3vw,1.7rem); font-weight:800; margin:18px 0; padding:20px; text-align:center; }
-        @media(max-width:640px) { main { padding:16px; } .verify-one { min-height:44px; } }
+        @media(max-width:640px) {
+            main { padding:16px; }
+            .verify-page { max-width:480px; }
+            .verify-page table { min-width:0; width:100%; }
+            .verify-page thead { display:none; }
+            .verify-page tbody tr { border:1px solid #dbe5e3; border-radius:10px; display:grid; gap:0 12px; grid-template-columns:1fr 1fr; margin:12px 0; padding:8px; }
+            .verify-page tbody td { border:0; display:block; min-width:0; overflow-wrap:anywhere; padding:8px; }
+            .verify-page tbody td:first-child,.verify-page tbody td:last-child { grid-column:1 / -1; }
+            .verify-page tbody td::before { color:#64748b; content:attr(data-label); display:block; font-size:.72rem; font-weight:700; margin-bottom:3px; text-transform:uppercase; }
+            .verify-one { min-height:46px; width:100%; }
+        }
     </style>
 @endsection

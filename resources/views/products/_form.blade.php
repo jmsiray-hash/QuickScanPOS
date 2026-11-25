@@ -5,8 +5,7 @@
         <input id="barcode" name="barcode" value="{{ old('barcode', $product->barcode) }}" maxlength="100" required autofocus autocomplete="off">
         <button class="button button-secondary" type="button" id="focus-barcode">Focus Scanner</button>
         <button class="button" type="button" id="scan-barcode">Scan Barcode</button>
-        <button class="button button-secondary" type="button" id="scan-with-phone">Scan with Phone</button>
-        @include('components.bluetooth-scanner-help', ['targetId' => 'barcode'])
+        <button class="button button-secondary" type="button" id="scan-with-phone">Connect Phone Online</button>
     </div>
     <section id="phone-scan-panel" class="phone-scan-panel" hidden>
         <h3>Connect a phone scanner</h3>
@@ -230,7 +229,7 @@
         });
 
         document.addEventListener('click', event => {
-            if (event.target.closest('input, select, textarea, button[type="submit"], .bluetooth-help')) return;
+            if (event.target.closest('input, select, textarea, button[type="submit"]')) return;
             codeInput.focus();
         });
         window.addEventListener('pagehide', closePhoneScanner);

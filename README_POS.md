@@ -22,11 +22,11 @@ php artisan serve
 
 After registering a product, select **Print QR** from the Products list (or **Print Product QR** while editing). The printable QR contains that product's barcode/printed code, so both the POS and phone cart scanner can add it.
 
-The product camera scanner, customer camera scanner, QR codes, and printed-number OCR use CDN scripts and need an internet connection. Camera access on phones requires HTTPS (or localhost). A phone configured as a Bluetooth HID keyboard works like a keyboard-wedge scanner: pair it in the computer/phone Bluetooth settings, focus the scanner field, scan, and let the phone send Enter.
+The product camera scanner, customer camera scanner, cashier phone scanner, QR codes, and printed-number OCR use CDN scripts and need an internet connection. Phone camera access requires HTTPS (or localhost). The cashier phone connects online by scanning the verification QR shown by the cashier POS; Bluetooth pairing is not required.
 
 When printing the store-entry QR, use the **Phone-accessible store URL** field. A QR created while the cashier browser is at `localhost` or `127.0.0.1` points back to that device, not the phone. Paste the VS Code forwarded HTTPS URL with `/shop` at the end; camera access on phones requires HTTPS.
 
-On **Products → Register Product**, **Scan with Phone** creates a temporary QR session. Scan it with the phone to open the mobile scanner; a barcode or OCR/manual code is sent back to the product form. The session expires after five minutes and can be used once. The QR initially uses the address currently open in the cashier's browser. For a phone on the same Wi-Fi, edit **URL the phone can reach** to use the cashier computer's LAN IP and the same port/path if needed. The web server must accept connections from the phone; camera scanning on a phone requires HTTPS. `localhost` and `127.0.0.1` on the QR are not the cashier computer when opened from another device.
+On **Products → Register Product**, **Connect Phone Online** creates a temporary QR session. Scan it with the phone to open the mobile scanner; a barcode or OCR/manual code is sent back to the product form. The session expires after five minutes and can be used once. The QR initially uses the address currently open in the cashier's browser. For a phone on the same Wi-Fi, edit **URL the phone can reach** to use the cashier computer's LAN IP and the same port/path if needed. The web server must accept connections from the phone; camera scanning on a phone requires HTTPS. `localhost` and `127.0.0.1` on the QR are not the cashier computer when opened from another device.
 
 ## Local Smartphone Testing over an HTTPS Tunnel
 
@@ -54,26 +54,27 @@ The scanner uses the browser camera API through `html5-qrcode` (and `getUserMedi
 1. Sign in as a cashier/admin and open **POS Checkout → Store Entry QR**, or visit `/pos/store-qr`. Print or display the QR code.
 2. The customer scans it, opens `/shop`, enters a name, and taps **Start Shopping**.
 3. On the cart page, use **Scan Barcode with Camera**, **Read Printed Number / Can Code**, or type a code and tap **Add Code**. OCR puts the recognized code in the input for review before adding it.
-4. Change quantities or remove items as needed. The page shows **Total Pieces** and **Running Grand Total**.
+4. On the phone-friendly cart page, change quantities or tap **Remove item** as needed. The page shows **Total Pieces** and **Running Grand Total**.
 5. Tap **Finish & Generate Cashier QR**. The resulting QR contains the `CART-...` cart token.
 
 Shopping carts expire after two hours. Product availability is checked while adding items, when the cashier imports the cart, and again during checkout.
 
 ## Cashier Import, Verification, and Payment
 
-1. At `/pos`, scan the customer's cart QR with the camera, enter its `CART-...` code, or use a paired HID barcode/keyboard device. The POS loads that cart without adding a sale.
-2. Tap **Generate Mobile Check QR**. Scan the displayed verification QR with the mobile verification device.
-3. On the mobile screen, scan each physical item's barcode, use OCR for a printed number, enter a code manually, or tap **Check one**. Unknown, unexpected, and over-quantity scans show a mismatch warning.
-4. Once every expected piece is checked, the mobile page and cashier POS show **SCANNED AND CHECKED ITEM - READY FOR PAYMENT**. The cashier POS polls for this state.
-5. Tap **Complete Checkout**. Payment remains available as a manual override; an unverified imported cart prompts for confirmation. Successful payment creates the sale, deducts stock, and marks the customer cart `paid` in the same database transaction. A paid cart cannot be imported again.
+1. At `/pos`, scan the customer's cart QR with the cashier screen camera or enter its `CART-...` code. The POS loads that cart without adding a sale.
+2. Before payment, the cashier may edit quantities, remove items, or scan additional products in the POS cart. Any change resets item checks.
+3. Tap **Connect Cashier Phone**. Scan the displayed verification QR with the cashier's phone; it opens the online item-check screen.
+4. On the phone, scan each physical item's barcode, use OCR for a printed number, enter a code manually, or tap **Check one**. Unknown, unexpected, and over-quantity scans show a mismatch warning. The phone refreshes its expected items when the cashier edits the cart.
+5. Once every expected piece is checked, the mobile page and cashier POS show **SCANNED AND CHECKED ITEM - READY FOR PAYMENT**. The cashier POS polls for this state, and checkout stays disabled until verification is complete.
+6. Tap **Complete Checkout**. Successful payment creates the sale, deducts stock, and marks the customer cart `paid` in the same database transaction. A paid cart cannot be imported again.
 
-## Desktop / Bluetooth HID Scanning
+## Online Phone Scanning
 
-- On **Products → Register Product**, focus the code field or use **Focus Scanner**. Scan a barcode or printed code; Enter performs a lookup and does not submit the product form. Complete the remaining fields and save.
-- **Connect Phone** on the product form and POS shows the setup steps and focuses the scanner field. Bluetooth pairing is done in the operating system; the POS web page cannot initiate pairing or detect Bluetooth status. The phone's scanner must support HID/keyboard mode and send Enter after a code.
-- Select **Scan with Phone** on the product form to show a one-time QR. The phone scans it, submits the product code, and the desktop form receives it automatically.
+- On **Products → Register Product**, select **Connect Phone Online** to display a one-time QR. The phone opens the mobile scanner and submits the scanned product code to the form.
+- On **POS Checkout**, scan the customer's `CART-` QR using the POS camera or enter its code, review and edit the imported items, then select **Connect Cashier Phone**.
+- Scan the verification QR with the cashier's phone. The mobile check page is online and scans each physical item against the expected cart.
 - On the Products list, choose **Print QR** to display a product QR that encodes the same code.
-- On **POS Checkout**, scan or type a product code into the focused scanner field. Enter adds the product; a `CART-` value imports a Scan & Go cart instead. The field clears immediately and duplicate scans of the same code within 800 ms are ignored.
+- Cashier edits to a customer cart reset its verification progress. All pieces must be checked again before the POS enables checkout.
 - The mobile camera scanner has a 1.2-second cooldown. Manual code entry is available if camera access or OCR is unavailable.
 
 ## Routes

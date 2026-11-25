@@ -7,17 +7,18 @@
     <div id="pos-toast" class="alert" role="status" hidden></div>
     <div class="page-actions pos-actions">
         <div class="row-actions pos-scanner-controls">
-            <input id="pos-barcode" type="text" placeholder="Barcode, printed code, or CART- code" autocomplete="off" autofocus>
+            <input id="pos-barcode" type="text" placeholder="Customer CART- code or product barcode" autocomplete="off" autofocus>
             <button class="button button-secondary" id="focus-pos-scanner" type="button">Focus Scanner</button>
-            <button class="button" id="add-pos-code" type="button">Add / Import</button>
-            <button class="button button-secondary" id="scan-item" type="button">Camera Scan</button>
-            @include('components.bluetooth-scanner-help', ['targetId' => 'pos-barcode'])
+            <button class="button" id="add-pos-code" type="button">Add Product / Load Customer Cart</button>
+            <button class="button button-secondary" id="scan-item" type="button">Scan Customer QR / Product</button>
         </div>
         <div class="row-actions">
             <a class="button button-secondary" href="{{ route('pos.store-qr') }}">Store Entry QR</a>
-            <button class="button" id="generate-verification" type="button">Generate Mobile Check QR</button>
+            <button class="button" id="generate-verification" type="button">Connect Cashier Phone</button>
         </div>
     </div>
+
+    <p class="cashier-flow-hint">Scan the customer's CART QR here to load their items. To check the physical items with a cashier phone, choose <strong>Connect Cashier Phone</strong> and scan the new QR with that phone. It works online over HTTPS; no Bluetooth pairing is needed.</p>
 
     <div id="pos-scanner" hidden>
         <div id="pos-reader"></div>
@@ -32,9 +33,10 @@
     </div>
     <div id="cart-summary"></div>
     <section id="verification-panel" class="verification-panel" hidden>
-        <h3>Mobile Item Verification</h3>
+        <h3>Cashier Phone Item Check</h3>
+        <p>Open the phone camera and scan this QR. The phone will show the expected items and let the cashier scan each physical item before payment.</p>
         <div id="verification-qr"></div>
-        <p>Scan this QR with the mobile verification device.</p>
+        <p class="field-hint">Keep this cashier page open. The checkout status updates when every expected piece is checked.</p>
         <p id="verification-link"></p>
         <div id="verification-badge" class="verified-banner" hidden>SCANNED AND CHECKED ITEM - READY FOR PAYMENT</div>
     </section>
@@ -65,9 +67,12 @@
             })[char]);
             function updatePaymentState() {
                 const button = document.getElementById('checkout');
-                button.textContent = isVerified
+                button.textContent = currentCartToken && !isVerified
+                    ? 'Verify Items Before Checkout'
+                    : isVerified
                     ? 'Complete Checkout - Verified'
-                    : currentCartToken ? 'Complete Checkout (Unverified)' : 'Complete Checkout';
+                    : 'Complete Checkout';
+                button.disabled = Boolean(currentCartToken && !isVerified);
                 button.classList.toggle('payment-ready', isVerified);
                 button.classList.toggle('payment-warning', Boolean(currentCartToken && !isVerified));
             }
@@ -321,7 +326,10 @@
                 }
             });
             document.getElementById('checkout').addEventListener('click', async () => {
-                if (currentCartToken && !isVerified && !window.confirm('Items have not been verified. Continue with payment anyway?')) return;
+                if (currentCartToken && !isVerified) {
+                    show('Scan and verify every item with the cashier phone before checkout.', true);
+                    return;
+                }
                 try {
                     const result = await request('{{ route('pos.checkout') }}', 'POST');
                     currentCartToken = null;
@@ -341,7 +349,7 @@
                 }
             });
             document.addEventListener('click', event => {
-                if (event.target.closest('input,select,textarea,.bluetooth-help')) return;
+                if (event.target.closest('input,select,textarea')) return;
                 focusScanner();
             });
             document.addEventListener('pagehide', () => {
@@ -355,6 +363,7 @@
         .pos-actions { align-items:flex-start; flex-direction:column; gap:14px; }
         .pos-scanner-controls { flex-wrap:wrap; width:100%; }
         .pos-scanner-controls input { flex:1; min-width:230px; border:1px solid #94a3b8; border-radius:5px; font:inherit; padding:10px; }
+        .cashier-flow-hint { background:#f0fdfa; border-left:4px solid #0f766e; margin:16px 0; padding:12px 16px; }
         .pos-quantity { width:72px; border:1px solid #94a3b8; border-radius:5px; font:inherit; padding:6px; }
         .verification-panel { background:#f0fdfa; border:1px solid #99f6e4; border-radius:8px; margin:20px 0; padding:20px; }
         #checkout.payment-ready { background:#15803d; }
@@ -362,6 +371,7 @@
         #verification-qr { display:flex; justify-content:center; margin:16px; }
         .verified-banner { background:#dcfce7; color:#166534; font-weight:800; padding:16px; text-align:center; }
         #pos-reader { max-width:520px; }
+        #checkout:disabled { background:#94a3b8; cursor:not-allowed; }
         @media(max-width:640px) { .pos-scanner-controls { align-items:stretch; flex-direction:column; } .pos-scanner-controls .button { min-height:44px; } }
     </style>
 @endsection

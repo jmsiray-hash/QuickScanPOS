@@ -19,7 +19,7 @@ class PosPagesTest extends TestCase
 
     public function test_home_and_about_pages_load(): void
     {
-        $this->get('/')->assertOk()->assertSee('Run your store with clarity.');
+        $this->get('/')->assertOk()->assertSee('Scan. Sell. Keep your store moving.');
         $this->get('/about')->assertOk()->assertSee('About the workspace');
     }
 

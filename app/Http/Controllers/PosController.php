@@ -269,6 +269,10 @@ class PosController extends Controller
                     ) {
                         abort(422, 'The customer cart is no longer available for checkout.');
                     }
+
+                    if ($customerCart->status !== 'verified_ready' || ! $customerCart->is_verified) {
+                        abort(422, 'Scan and verify every item with the cashier phone before checkout.');
+                    }
                 }
 
                 $subtotal = 0;
@@ -371,10 +375,6 @@ class PosController extends Controller
                     'qty' => (int) $line['quantity'],
                     'price' => (float) $line['unit_price'],
                 ]);
-                if ($changed) {
-                    $item->checked_qty = 0;
-                    $item->is_checked = false;
-                }
                 $item->save();
             }
 
@@ -384,6 +384,10 @@ class PosController extends Controller
             }
 
             if ($changed) {
+                $cart->items()->update([
+                    'checked_qty' => 0,
+                    'is_checked' => false,
+                ]);
                 $cart->update([
                     'is_verified' => false,
                     'verified_at' => null,

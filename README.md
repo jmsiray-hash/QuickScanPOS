@@ -14,8 +14,8 @@ This Laravel 12 Point of Sale application demonstrates database-backed customer 
 - User avatars stored as image files with their paths saved in the database
 - Authenticated avatar URLs that work without a public storage symlink
 - Customer Scan & Go carts with customer and cashier QR workflows
-- Mobile item verification before checkout, with a manual payment override
-- Barcode, keyboard-wedge, Bluetooth HID, and printed product code scanning
+- Mobile item verification required before customer-cart checkout
+- Barcode, online phone-camera, and printed product code scanning
 - Printable product QR codes for POS and smartphone scanning
 - Laravel Breeze login, registration, logout, and password management
 - `auth` middleware protecting customer and user management
