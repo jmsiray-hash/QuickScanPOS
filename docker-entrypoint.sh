@@ -43,11 +43,41 @@ case "$DB_CONNECTION" in
             fi
         fi
 
-        echo "Running migrations using ${DATABASE_SOURCE}."
-        if ! php artisan migrate --force; then
-            echo "Database migration failed. Verify the Render database host, port, database name, username, password, and TLS CA settings." >&2
+        if ! MIGRATION_SCHEMA_STATUS="$(
+            php -r '
+                require "vendor/autoload.php";
+                $app = require "bootstrap/app.php";
+                $app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
+                $hasLegacyMigrationsTable =
+                    Illuminate\Support\Facades\Schema::hasTable("migrations")
+                    && ! Illuminate\Support\Facades\Schema::hasColumn("migrations", "migration");
+                echo $hasLegacyMigrationsTable ? "legacy" : "current";
+            '
+        )"; then
+            echo "Could not inspect the database migrations table. Verify the database connection and TLS CA settings." >&2
             exit 1
         fi
+
+        case "$MIGRATION_SCHEMA_STATUS" in
+            legacy)
+                echo "Incompatible legacy migrations table detected. Running migrate:fresh; this will drop all tables and data in the configured database."
+                if ! php artisan migrate:fresh --force; then
+                    echo "Fresh database migration failed. Verify the Render database host, port, database name, username, password, and TLS CA settings." >&2
+                    exit 1
+                fi
+                ;;
+            current)
+                echo "Running migrations using ${DATABASE_SOURCE}."
+                if ! php artisan migrate --force; then
+                    echo "Database migration failed. Verify the Render database host, port, database name, username, password, and TLS CA settings." >&2
+                    exit 1
+                fi
+                ;;
+            *)
+                echo "Unexpected migrations table check result: ${MIGRATION_SCHEMA_STATUS}" >&2
+                exit 1
+                ;;
+        esac
         ;;
     sqlite)
         SQLITE_DATABASE="${DB_DATABASE:-/var/www/html/database/database.sqlite}"

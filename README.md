@@ -97,6 +97,8 @@ MYSQL_ATTR_SSL_VERIFY_SERVER_CERT=true
 
 The password must be copied exactly from Aiven, and the Render service must use the host and port from the same Aiven service. For a password containing special characters, use the unescaped password as the Render environment value.
 
+At startup, the container checks the connected MySQL database's `migrations` table. If it exists without Laravel's `migration` column, the entrypoint runs `php artisan migrate:fresh --force`, which drops **all tables and data** in that configured database before rebuilding the schema. This one-time reset is limited to that incompatible schema; when the table is valid (or does not exist yet), startup uses `php artisan migrate --force` and preserves existing data.
+
 ## Storage Setup
 
 ```sh
