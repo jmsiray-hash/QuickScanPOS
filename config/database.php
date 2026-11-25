@@ -3,6 +3,20 @@
 use Illuminate\Support\Str;
 
 $mysqlSslCa = env('MYSQL_ATTR_SSL_CA');
+if (is_string($mysqlSslCa) && trim($mysqlSslCa) !== '') {
+    if (! is_file($mysqlSslCa)) {
+        if (is_file('/etc/secrets/ca.pem')) {
+            $mysqlSslCa = '/etc/secrets/ca.pem';
+        } else {
+            throw new RuntimeException('MYSQL_ATTR_SSL_CA is set, but the CA certificate file does not exist.');
+        }
+    }
+} elseif (is_file('/etc/secrets/ca.pem')) {
+    $mysqlSslCa = '/etc/secrets/ca.pem';
+} else {
+    $mysqlSslCa = null;
+}
+
 $mysqlSslVerifyServerCert = env('MYSQL_ATTR_SSL_VERIFY_SERVER_CERT');
 if ($mysqlSslVerifyServerCert === null || $mysqlSslVerifyServerCert === '') {
     $mysqlSslVerifyServerCert = $mysqlSslCa ? true : null;
