@@ -1,4 +1,4 @@
-# Technical Formative Assessment 8
+# QuickScanPOS Final Project
 ## Resource Controllers and Authentication in Laravel POS
 
 ## Project Description
