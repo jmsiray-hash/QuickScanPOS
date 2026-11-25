@@ -78,7 +78,7 @@ gregoria@example.com
 
 Set `DB_CONNECTION=mysql` and use the host, port, database name, username, and password shown in the Aiven service connection details. Do not assume port `3306`; use the port Aiven provides. The Docker entrypoint runs `php artisan migrate --force` before Apache starts, so a failed database connection or migration prevents the container from starting.
 
-If Aiven requires its CA certificate, add the certificate in Render as a Secret File and set `MYSQL_ATTR_SSL_CA` to that file's path (for example, `/etc/secrets/aiven-ca.pem`). Server certificate verification is enabled when a CA path is provided; `MYSQL_ATTR_SSL_VERIFY_SERVER_CERT` can explicitly override that behavior. Do not put database credentials or CA certificates in the repository.
+Add Aiven's CA certificate in Render as a Secret File and set `MYSQL_ATTR_SSL_CA` to that file's path (for example, `/etc/secrets/aiven-ca.pem`). If that variable is unset, the app uses `/etc/secrets/ca.pem` when it exists. MySQL SSL server-certificate verification is disabled for PDO compatibility with Aiven; the connection remains encrypted, but the server certificate is not validated. Do not put database credentials or CA certificates in the repository.
 
 Alternatively, set `DATABASE_URL` to Aiven's MySQL URI. The application maps `DATABASE_URL` to Laravel's `DB_URL` connection setting at startup.
 
@@ -92,10 +92,11 @@ DB_DATABASE=<Aiven database name>
 DB_USERNAME=<Aiven username>
 DB_PASSWORD=<Aiven password>
 MYSQL_ATTR_SSL_CA=/etc/secrets/aiven-ca.pem
-MYSQL_ATTR_SSL_VERIFY_SERVER_CERT=true
 ```
 
 The password must be copied exactly from Aiven, and the Render service must use the host and port from the same Aiven service. For a password containing special characters, use the unescaped password as the Render environment value.
+
+The Docker entrypoint clears and rebuilds Laravel's configuration cache at container startup, so the web process uses the current Render environment variables rather than values cached during the image build.
 
 At startup, the container checks the connected MySQL database's `migrations` table. If it exists without Laravel's `migration` column, the entrypoint runs `php artisan migrate:fresh --force`, which drops **all tables and data** in that configured database before rebuilding the schema. This one-time reset is limited to that incompatible schema; when the table is valid (or does not exist yet), startup uses `php artisan migrate --force` and preserves existing data.
 

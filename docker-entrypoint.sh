@@ -14,6 +14,7 @@ sed -ri "s/<VirtualHost \\*:80>/<VirtualHost *:${PORT}>/" /etc/apache2/sites-ava
 
 cd /var/www/html
 php artisan config:clear
+php artisan config:cache
 php artisan route:clear
 
 DB_CONNECTION="${DB_CONNECTION:-mysql}"
