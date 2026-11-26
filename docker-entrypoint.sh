@@ -98,6 +98,10 @@ case "$DB_CONNECTION" in
         ;;
 esac
 
+mkdir -p storage/app/public/products storage/app/public/avatars
+chown -R www-data:www-data storage/app/public
+chmod -R 775 storage/app/public
+
 php artisan config:clear
 php artisan config:cache
 php artisan route:cache

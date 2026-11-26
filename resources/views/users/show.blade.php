@@ -16,6 +16,7 @@
         alt="{{ $user->full_name }} avatar"
         width="120"
         height="120"
+        onerror="this.onerror=null;this.src='{{ asset('images/avatar-placeholder.svg') }}';"
     >
     <dl>
         <dt>Username</dt><dd>{{ $user->username }}</dd>

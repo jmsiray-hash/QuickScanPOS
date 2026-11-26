@@ -78,7 +78,7 @@
                     <tr>
                         <td data-label="Product">
                             <div class="shop-cart-product">
-                                ${item.image_url ? `<img class="shop-product-image" src="${escapeHtml(item.image_url)}" alt="${escapeHtml(item.name)}">` : '<span class="shop-product-image-placeholder">No photo</span>'}
+                                ${item.image_url ? `<img class="shop-product-image" src="${escapeHtml(item.image_url)}" alt="${escapeHtml(item.name)}" onerror="this.onerror=null;this.outerHTML='<span class=\\'shop-product-image-placeholder\\'>No photo</span>';">` : '<span class="shop-product-image-placeholder">No photo</span>'}
                                 <span>${escapeHtml(item.name)}<br><small>${escapeHtml(item.code)}</small></span>
                             </div>
                         </td>

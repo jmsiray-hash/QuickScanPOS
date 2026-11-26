@@ -31,6 +31,7 @@
                                 alt="{{ $user->full_name }} avatar"
                                 width="56"
                                 height="56"
+                                onerror="this.onerror=null;this.src='{{ asset('images/avatar-placeholder.svg') }}';"
                             >
                         </td>
                         <td>{{ $user->username }}</td>
