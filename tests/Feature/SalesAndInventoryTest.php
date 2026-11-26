@@ -142,7 +142,7 @@ class SalesAndInventoryTest extends TestCase
 
         $this->get(route('cashier-dashboard'))
         ->assertOk()
-        ->assertSee('Cashier workspace')
+        ->assertSee('Cashier dashboard')
         ->assertSee('Current sale')
         ->assertSee('Apply discount')
         ->assertSee('Complete payment')
@@ -199,6 +199,48 @@ class SalesAndInventoryTest extends TestCase
         ->assertOk()
         ->assertSee('SHIFT OPEN')
         ->assertSee('Shift started');
+    }
+
+    public function test_cashier_customer_qr_scans_are_recorded_and_reported_on_the_cashier_dashboard(): void
+    {
+        $product = $this->product('QR-REPORT-1', 'Report Item', 5);
+        $cart = CustomerCart::create([
+            'token' => 'CART-REPORT-0001',
+            'customer_name' => 'Dashboard Shopper',
+            'status' => 'ready_for_checkout',
+            'expires_at' => now()->addHour(),
+        ]);
+        CustomerCartItem::create([
+            'customer_cart_id' => $cart->id,
+            'product_id' => $product->id,
+            'qty' => 2,
+            'price' => 2,
+        ]);
+
+        $this->getJson(route('pos.import-cart', $cart->token))
+            ->assertOk()
+            ->assertJsonPath('customer_name', 'Dashboard Shopper');
+
+        $this->assertDatabaseHas('cashier_customer_scans', [
+            'cashier_id' => auth()->id(),
+            'customer_cart_id' => $cart->id,
+            'cart_token' => $cart->token,
+            'customer_name' => 'Dashboard Shopper',
+            'item_count' => 2,
+        ]);
+
+        $this->get(route('cashier-dashboard'))
+            ->assertOk()
+            ->assertSee('Cashier dashboard')
+            ->assertSee('Customer QR report')
+            ->assertSee('Dashboard Shopper')
+            ->assertSee('CART-REPORT-0001');
+
+        $this->getJson(route('cashier-dashboard.scan-report'))
+            ->assertOk()
+            ->assertJsonPath('today_count', 1)
+            ->assertJsonPath('scans.0.customer', 'Dashboard Shopper')
+            ->assertJsonPath('scans.0.item_count', 2);
     }
 
     public function test_checkout_requires_an_open_shift(): void

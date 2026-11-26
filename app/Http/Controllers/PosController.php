@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\CustomerCart;
+use App\Models\CashierCustomerScan;
 use App\Models\Customer;
 use App\Models\CashierShift;
 use App\Models\Product;
@@ -82,6 +83,15 @@ class PosController extends Controller
                 'senior_pwd_eligible' => $product->senior_pwd_eligible,
             ];
         }
+
+        CashierCustomerScan::create([
+            'cashier_id' => request()->user()->id,
+            'customer_cart_id' => $cart->id,
+            'cart_token' => $cart->token,
+            'customer_name' => $cart->customer_name,
+            'item_count' => $cart->items->sum('qty'),
+            'scanned_at' => now(),
+        ]);
 
         session()->forget('pos_customer_id');
         session([
