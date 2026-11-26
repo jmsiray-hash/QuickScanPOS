@@ -482,7 +482,7 @@
                     </tr>
                 `).join('');
                 document.getElementById('sale-receipt-content').innerHTML = `
-                    <div class="receipt-store"><strong>${escape(receipt.store)}</strong><div>Sales Receipt #${receipt.id}</div></div>
+                    <div class="receipt-store"><strong>${escape(receipt.store_name || receipt.store)}</strong><div>${escape(receipt.store_address || '')}</div><div>Sales Receipt #${receipt.id}</div></div>
                     <p>${escape(receipt.created_at)}<br>Cashier: ${escape(receipt.cashier)}${receipt.customer_name ? '<br>Customer: ' + escape(receipt.customer_name) : ''}</p>
                     <table class="receipt-modal-table"><thead><tr><th>Item</th><th>Qty</th><th>Price</th><th>Discount</th><th>Total</th></tr></thead><tbody>${items}</tbody></table>
                     <dl class="receipt-modal-totals">

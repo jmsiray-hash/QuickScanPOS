@@ -7,6 +7,7 @@ use App\Models\CustomerCartItem;
 use App\Models\Customer;
 use App\Models\CashierShift;
 use App\Models\Product;
+use App\Models\StoreSetting;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -54,7 +55,8 @@ class ScanAndGoTest extends TestCase
     {
         $this->get(route('shop.entry'))
             ->assertOk()
-            ->assertSee('Start Shopping');
+            ->assertSee('Start Shopping')
+            ->assertSee('Your store visit is registered');
         $this->get(route('pos.store-qr'))
             ->assertOk()
             ->assertSee('Scan & Go Store Entry')
@@ -365,6 +367,127 @@ class ScanAndGoTest extends TestCase
         $this->get(route('pos.verify', $cart->fresh()->verification_code))
             ->assertOk()
             ->assertSee('Taylor Shopper');
+    }
+
+    public function test_admin_store_settings_are_saved_to_receipts_shown_on_customer_phone(): void
+    {
+        $cashier = auth()->user();
+        $product = $this->product('PHONE-RECEIPT-1', 3, 25.00);
+        $cart = CustomerCart::create([
+            'token' => 'CART-PHONE-RECEIPT1',
+            'customer_name' => 'Receipt Shopper',
+            'status' => 'ready_for_checkout',
+            'expires_at' => now()->addHour(),
+        ]);
+        CustomerCartItem::create([
+            'customer_cart_id' => $cart->id,
+            'product_id' => $product->id,
+            'qty' => 1,
+            'price' => 25,
+        ]);
+
+        $this->get(route('settings.store.edit'))->assertForbidden();
+        $admin = User::factory()->create(['role' => 'admin']);
+        $this->actingAs($admin)
+            ->get(route('settings.store.edit'))
+            ->assertOk()
+            ->assertSee('Company / store name');
+        $this->put(route('settings.store.update'), [
+            'store_name' => 'Green Basket Market',
+            'store_address' => "12 Market Road\nQuezon City",
+        ])->assertRedirect(route('settings.store.edit'));
+
+        $this->actingAs($cashier);
+        $this->postJson(route('pos.scan'), ['code' => $cart->token])->assertOk();
+        $checkout = $this->postJson(route('pos.checkout'), [
+            'payment_method' => 'cash',
+            'cash_received' => 30,
+        ])->assertOk()
+            ->assertJsonPath('receipt.store_name', 'Green Basket Market')
+            ->assertJsonPath('receipt.store_address', "12 Market Road\nQuezon City");
+
+        $sale = \App\Models\Sale::findOrFail($checkout->json('sale_id'));
+        $this->assertSame($sale->id, $cart->fresh()->sale_id);
+        $this->getJson(route('shop.cart.status', $cart->token))
+            ->assertOk()
+            ->assertJsonPath('cart.status', 'paid')
+            ->assertJsonPath('cart.receipt.paid', true)
+            ->assertJsonPath('cart.receipt.store_name', 'Green Basket Market')
+            ->assertJsonPath('cart.receipt.items.0.name', 'Test PHONE-RECEIPT-1')
+            ->assertJsonPath('cart.receipt.total', 25);
+
+        $this->get(route('shop.cart', $cart->token))
+            ->assertOk()
+            ->assertSee('PAID — Your checkout is complete.')
+            ->assertSee('PAID RECEIPT #${receipt.id}', false)
+            ->assertSee('Rate our service');
+        $this->get(route('sales.show', $sale))
+            ->assertOk()
+            ->assertSee('Green Basket Market')
+            ->assertSee('12 Market Road');
+
+        $this->postJson(route('shop.cart.rate', $cart->token), [
+            'rating' => 5,
+            'feedback' => 'Great service',
+        ])->assertOk()
+            ->assertJsonPath('cart.service_rating', 5)
+            ->assertJsonPath('cart.service_feedback', 'Great service');
+
+        $this->assertSame('Green Basket Market', StoreSetting::current()->store_name);
+    }
+
+    public function test_staff_customer_activity_lists_cart_and_displays_its_live_items(): void
+    {
+        $product = $this->product('ACTIVITY-CART-1', 3, 9.50);
+        $cart = CustomerCart::create([
+            'token' => 'CART-ACTIVITY-TEST1',
+            'customer_name' => 'Activity Shopper',
+            'status' => 'shopping',
+            'expires_at' => now()->addHour(),
+        ]);
+        CustomerCartItem::create([
+            'customer_cart_id' => $cart->id,
+            'product_id' => $product->id,
+            'qty' => 2,
+            'price' => 9.50,
+        ]);
+
+        $this->get(route('customer-activity.index'))
+            ->assertOk()
+            ->assertSee('Activity Shopper')
+            ->assertSee(route('customer-activity.show', $cart), false);
+        $this->get(route('customer-activity.show', $cart))
+            ->assertOk()
+            ->assertSee('Test ACTIVITY-CART-1')
+            ->assertSee('₱19.00');
+        $this->getJson(route('customer-activity.status', $cart))
+            ->assertOk()
+            ->assertJsonPath('cart.items.0.name', 'Test ACTIVITY-CART-1')
+            ->assertJsonPath('cart.items.0.qty', 2);
+    }
+
+    public function test_scanning_store_entry_registers_a_guest_visit_before_products_are_added(): void
+    {
+        $this->app['auth']->guard('customer')->logout();
+        $this->get(route('shop.entry'))
+            ->assertOk()
+            ->assertSee('Your store visit is registered');
+
+        $visit = CustomerCart::query()->where('customer_name', 'Guest Shopper')->latest()->firstOrFail();
+        $this->assertSame('shopping', $visit->status);
+        $this->assertSame(0, $visit->items()->count());
+        $this->get(route('customer-activity.index'))
+            ->assertOk()
+            ->assertSee('Guest Shopper')
+            ->assertSee(route('customer-activity.show', $visit), false);
+
+        $this->post(route('shop.start'), [
+            'guest' => 1,
+            'customer_name' => 'Walk-in at Entrance',
+        ])->assertRedirect();
+
+        $startedCart = CustomerCart::query()->where('customer_name', 'Walk-in at Entrance')->firstOrFail();
+        $this->assertSame('shopping', $startedCart->status);
     }
 
     public function test_cashier_can_verify_every_piece_and_checkout_the_imported_cart(): void

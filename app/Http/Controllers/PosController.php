@@ -7,6 +7,7 @@ use App\Models\Customer;
 use App\Models\CashierShift;
 use App\Models\Product;
 use App\Models\Sale;
+use App\Models\StoreSetting;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -485,11 +486,14 @@ class PosController extends Controller
                     abort(422, 'Cash received must be at least ₱'.number_format($saleTotal, 2).'.');
                 }
 
+                $storeSettings = StoreSetting::current();
                 $sale = Sale::create([
                     'user_id' => $request->user()->id,
                     'customer_id' => $customer?->id,
                     'customer_name' => $customer?->full_name ?? $customerCart?->customer_name,
                     'shift_id' => $shift->id,
+                    'store_name' => $storeSettings->store_name,
+                    'store_address' => $storeSettings->store_address,
                     'subtotal' => $subtotal,
                     'tax' => $taxTotal,
                     'discount' => $discountTotal,
@@ -529,7 +533,10 @@ class PosController extends Controller
                 }
 
                 if ($customerCart !== null) {
-                    $customerCart->update(['status' => 'paid']);
+                    $customerCart->update([
+                        'status' => 'paid',
+                        'sale_id' => $sale->id,
+                    ]);
                 }
 
                 return $sale;
@@ -558,6 +565,8 @@ class PosController extends Controller
             'receipt' => [
                 'id' => $sale->id,
                 'store' => config('app.name'),
+                'store_name' => $sale->store_name,
+                'store_address' => $sale->store_address,
                 'created_at' => $sale->created_at->format('M j, Y g:i A'),
                 'cashier' => $sale->user?->name ?? 'Cashier',
                 'customer_name' => $sale->customer_name,

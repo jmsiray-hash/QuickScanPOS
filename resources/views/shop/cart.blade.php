@@ -34,7 +34,8 @@
         </section>
         <section id="paid-panel" class="qr-panel" hidden>
             <h3>Transaction Complete</h3>
-            <p>Your checkout is complete. Thank you for shopping at QuickScanPos.</p>
+            <p class="paid-banner">PAID — Your checkout is complete. Thank you for shopping with us.</p>
+            <section id="mobile-receipt" class="mobile-receipt" hidden></section>
             <div id="rating-form-wrap">
                 <p><strong>Rate our service</strong></p>
                 <div class="rating-stars" role="radiogroup" aria-label="Service rating">
@@ -67,6 +68,7 @@
             const paidPanel = document.getElementById('paid-panel');
             const ratingFormWrap = document.getElementById('rating-form-wrap');
             const ratingThanks = document.getElementById('rating-thanks');
+            const mobileReceipt = document.getElementById('mobile-receipt');
             let cart = initialCart;
             let pollTimer = null;
 
@@ -115,6 +117,7 @@
                 paidPanel.hidden = !paid;
                 finish.hidden = paid;
                 if (!paid) return;
+                renderReceipt(cart.receipt);
                 if (cart.rated_at) {
                     ratingFormWrap.hidden = true;
                     ratingThanks.hidden = false;
@@ -123,6 +126,27 @@
                     ratingFormWrap.hidden = false;
                     ratingThanks.hidden = true;
                 }
+            }
+
+            function renderReceipt(receipt) {
+                if (!receipt) return;
+                mobileReceipt.hidden = false;
+                const rows = receipt.items.map(item => `
+                    <tr>
+                        <td>${escapeHtml(item.name)}${item.is_promo ? ' <strong class="promo-tag">PROMO</strong>' : ''}</td>
+                        <td>${item.quantity}</td>
+                        <td>${money(item.unit_price)}</td>
+                        <td>${money(item.line_total)}</td>
+                    </tr>
+                `).join('');
+                mobileReceipt.innerHTML = `
+                    <h4>${escapeHtml(receipt.store_name || 'QuickScanPos')}</h4>
+                    <p>${escapeHtml(receipt.store_address || '')}</p>
+                    <p><strong>PAID RECEIPT #${receipt.id}</strong><br>${escapeHtml(receipt.created_at)}</p>
+                    <div class="table-wrap"><table><thead><tr><th>Item</th><th>Qty</th><th>Price</th><th>Total</th></tr></thead><tbody>${rows}</tbody></table></div>
+                    <p>Subtotal: ${money(receipt.subtotal)}<br>Discount: ${money(receipt.discount)}<br>Tax: ${money(receipt.tax)}<br><strong>Paid total: ${money(receipt.total)}</strong><br>Payment: ${escapeHtml(String(receipt.payment_method || '').toUpperCase())}${receipt.payment_reference ? '<br>Reference: ' + escapeHtml(receipt.payment_reference) : ''}</p>
+                    <button class="button button-secondary" type="button" id="print-customer-receipt">Print Receipt</button>`;
+                document.getElementById('print-customer-receipt').addEventListener('click', () => window.print());
             }
 
             function render() {
@@ -232,6 +256,9 @@
         .cart-summary { display:flex; flex-wrap:wrap; gap:28px; font-size:1.15rem; }
         .shop-quantity { width:84px; border:1px solid #94a3b8; border-radius:5px; font:inherit; padding:8px; }
         .qr-panel { margin-top:24px; padding:20px; border:2px solid #0f766e; border-radius:8px; text-align:center; }
+        .paid-banner { background:#dcfce7; border-radius:8px; color:#166534; font-size:1.1rem; font-weight:800; padding:12px; }
+        .mobile-receipt { background:#fff; border:1px solid #99f6e4; border-radius:8px; margin:18px auto; max-width:620px; padding:16px; text-align:left; }
+        .mobile-receipt h4,.mobile-receipt>p:first-of-type { margin:0; text-align:center; white-space:pre-line; }
         #cashier-cart-qr { display:flex; justify-content:center; margin:16px; }
         .rating-stars { display:flex; flex-wrap:wrap; gap:10px; justify-content:center; margin:12px 0; }
         .rating-star { background:#f0fdfa; border:1px solid #99f6e4; border-radius:6px; cursor:pointer; padding:8px 12px; }
@@ -256,5 +283,6 @@
             .shop-cart .button { min-height:46px; }
             .qr-panel { padding:14px; }
         }
+        @media print { .site-header,.site-shell>footer,.shop-cart> :not(#paid-panel),#rating-form-wrap { display:none !important; } .site-shell { max-width:none; padding:0; } main { border:0; padding:0; } }
     </style>
 @endsection

@@ -7,8 +7,8 @@
         <h2>Scan &amp; Go</h2>
         @if ($activeCart)
             <section class="resume-cart" aria-label="Resume cart">
-                <h3>Welcome back</h3>
-                <p>You have an unfinished cart on this device. Continue where you left off, or start a new cart.</p>
+                <h3>{{ $activeCart->items->isEmpty() ? 'Your store visit is registered' : 'Welcome back' }}</h3>
+                <p>{{ $activeCart->items->isEmpty() ? 'Your cart is ready. Start scanning products, or enter a name below before continuing.' : 'You have an unfinished cart on this device. Continue where you left off, or start a new cart.' }}</p>
                 <div class="resume-summary">
                     <p><strong>Cart:</strong> {{ $activeCart->token }}</p>
                     <p><strong>Name:</strong> {{ $activeCart->customer_name }}</p>
@@ -30,7 +30,7 @@
                     <form action="{{ route('shop.start') }}" method="POST">
                         @csrf
                         <input type="hidden" name="resume" value="1">
-                        <button class="button" type="submit">Continue My Cart</button>
+                        <button class="button" type="submit">{{ $activeCart->items->isEmpty() ? 'Start Shopping' : 'Continue My Cart' }}</button>
                     </form>
                 </div>
             </section>
@@ -51,7 +51,7 @@
             </div>
             <hr>
         @endif
-        <h3>{{ $activeCart ? 'Start a New Guest Cart' : 'Continue as Guest' }}</h3>
+        <h3>{{ $activeCart && !$activeCart->items->isEmpty() ? 'Start a New Guest Cart' : 'Continue as Guest' }}</h3>
         <p>No account or login is required to scan items and shop.</p>
         <form class="form-grid" action="{{ route('shop.start') }}" method="POST">
             @csrf
@@ -61,7 +61,7 @@
                 <input id="customer_name" name="customer_name" maxlength="100" autocomplete="name" value="{{ old('customer_name') }}" placeholder="Guest Shopper">
                 @error('customer_name')<p class="error">{{ $message }}</p>@enderror
             </div>
-            <button class="button" type="submit">{{ $activeCart ? 'Start New Guest Cart' : 'Start Shopping as Guest' }}</button>
+            <button class="button" type="submit">{{ $activeCart && !$activeCart->items->isEmpty() ? 'Start New Guest Cart' : 'Start Shopping as Guest' }}</button>
         </form>
         @unless ($customer)
             <hr>

@@ -14,6 +14,9 @@ This Laravel 12 Point of Sale application demonstrates database-backed customer 
 - User avatars stored as image files with their paths saved in the database
 - Authenticated avatar URLs that work without a public storage symlink
 - Customer Scan & Go carts with customer and cashier QR workflows
+- Admin-managed company/store details on printed and mobile receipts
+- Live staff view of Scan & Go visits and customer carts
+- Paid mobile receipts with customer service ratings
 - Optional cashier-phone item verification for customer carts
 - Barcode, online phone-camera, and printed product code scanning
 - Printable product QR codes for POS and smartphone scanning

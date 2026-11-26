@@ -3,6 +3,10 @@
 @section('title', 'Sale #'.$sale->id.' Receipt | QuickScanPos')
 
 @section('content')
+    <header class="receipt-store-header">
+        <h2>{{ $sale->store_name ?: $storeSettings->store_name }}</h2>
+        <p>{{ $sale->store_address ?: $storeSettings->store_address }}</p>
+    </header>
     <div class="page-actions receipt-actions">
         <h2>Sale Receipt #{{ $sale->id }}</h2>
         <div class="row-actions">
@@ -119,7 +123,8 @@
                     '\x1B@',
                     '\x1Ba\x01',
                     '\x1BE\x01',
-                    'QuickScanPOS',
+                    ascii(receipt.store_name || 'QuickScanPOS'),
+                    ...wrapText(receipt.store_address || '', width),
                     'SALES RECEIPT',
                     '\x1BE\x00',
                     '\x1Ba\x00',
@@ -260,6 +265,9 @@
     </script>
 
     <style>
+        .receipt-store-header { margin-bottom:18px; text-align:center; }
+        .receipt-store-header h2 { margin:0; }
+        .receipt-store-header p { margin:4px 0; white-space:pre-line; }
         .receipt-actions { align-items:center; flex-wrap:wrap; gap:8px; }
         .receipt-actions select { border:1px solid #94a3b8; border-radius:5px; font:inherit; padding:8px; }
         .printer-status { background:#f1f5f9; border-radius:6px; padding:10px 12px; }

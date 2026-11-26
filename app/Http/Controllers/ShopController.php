@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\CustomerCart;
 use App\Models\CustomerCartItem;
 use App\Models\Product;
+use App\Services\CustomerCartPresenter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -24,11 +25,21 @@ class ShopController extends Controller
         [$deviceToken, $cookie] = $this->resolveDeviceToken($request);
         $customer = Auth::guard('customer')->user();
         $activeCart = $this->activeCartForDevice($deviceToken, $customer?->id);
+        if ($activeCart === null) {
+            $activeCart = CustomerCart::create([
+                'customer_id' => $customer?->id,
+                'device_token' => $deviceToken,
+                'token' => $this->newCode('CART-'),
+                'customer_name' => $customer?->full_name ?? 'Guest Shopper',
+                'status' => 'shopping',
+                'expires_at' => now()->addHours(2),
+            ]);
+        }
 
         $response = response()->view('shop.entry', [
             'customer' => $customer,
             'activeCart' => $activeCart,
-            'activeCartData' => $activeCart ? $this->cartData($activeCart) : null,
+            'activeCartData' => $activeCart ? CustomerCartPresenter::make($activeCart) : null,
         ]);
 
         if ($cookie !== null) {
@@ -52,6 +63,26 @@ class ShopController extends Controller
 
         $activeCart = $this->activeCartForDevice($deviceToken, $customer?->id);
         if ($request->boolean('resume') && $activeCart !== null) {
+            $redirect = to_route('shop.cart', $activeCart->token);
+            if ($cookie !== null) {
+                $redirect->withCookie($cookie);
+            }
+
+            return $redirect;
+        }
+
+        if (
+            $activeCart !== null
+            && $activeCart->status === 'shopping'
+            && ! $activeCart->items()->exists()
+        ) {
+            $activeCart->update([
+                'customer_id' => $guest ? null : $customer?->id,
+                'customer_name' => $guest
+                    ? ($customerName !== '' ? $customerName : 'Guest Shopper')
+                    : $customer->full_name,
+                'expires_at' => now()->addHours(2),
+            ]);
             $redirect = to_route('shop.cart', $activeCart->token);
             if ($cookie !== null) {
                 $redirect->withCookie($cookie);
@@ -86,7 +117,7 @@ class ShopController extends Controller
 
         return view('shop.cart', [
             'cart' => $cart,
-            'cartData' => $this->cartData($cart),
+            'cartData' => CustomerCartPresenter::make($cart),
         ]);
     }
 
@@ -96,7 +127,7 @@ class ShopController extends Controller
         $this->expireIfNeeded($cart);
 
         return response()->json([
-            'cart' => $this->cartData($cart),
+            'cart' => CustomerCartPresenter::make($cart),
         ]);
     }
 
@@ -142,11 +173,12 @@ class ShopController extends Controller
             $item->checked_qty = 0;
             $item->is_checked = false;
             $item->save();
+            $lockedCart->touch();
         });
 
         return response()->json([
             'message' => 'Added to your cart.',
-            'cart' => $this->cartData($cart->fresh()),
+            'cart' => CustomerCartPresenter::make($cart->fresh()),
         ]);
     }
 
@@ -166,6 +198,7 @@ class ShopController extends Controller
 
             if ((int) $validated['qty'] === 0) {
                 $lockedItem->delete();
+                $lockedCart->touch();
 
                 return;
             }
@@ -180,10 +213,11 @@ class ShopController extends Controller
                 'checked_qty' => 0,
                 'is_checked' => false,
             ]);
+            $lockedCart->touch();
         });
 
         return response()->json([
-            'cart' => $this->cartData($cart->fresh()),
+            'cart' => CustomerCartPresenter::make($cart->fresh()),
         ]);
     }
 
@@ -214,7 +248,7 @@ class ShopController extends Controller
             'qr_value' => $cart->token,
             'qr_url' => route('pos.verify', $cart->verification_code),
             'verification_url' => route('pos.verify', $cart->verification_code),
-            'cart' => $this->cartData($cart),
+            'cart' => CustomerCartPresenter::make($cart),
         ]);
     }
 
@@ -228,7 +262,7 @@ class ShopController extends Controller
         if ($cart->rated_at !== null) {
             return response()->json([
                 'message' => 'Thank you, your rating has already been recorded.',
-                'cart' => $this->cartData($cart),
+                'cart' => CustomerCartPresenter::make($cart),
             ]);
         }
 
@@ -245,7 +279,7 @@ class ShopController extends Controller
 
         return response()->json([
             'message' => 'Thank you for rating our service!',
-            'cart' => $this->cartData($cart->fresh()),
+            'cart' => CustomerCartPresenter::make($cart->fresh()),
         ]);
     }
 
@@ -284,48 +318,6 @@ class ShopController extends Controller
         if ($cart->status !== 'shopping') {
             abort(409, 'This cart is no longer open for changes.');
         }
-    }
-
-    private function cartData(CustomerCart $cart): array
-    {
-        $items = $cart->items()->with('product')->get()->map(static function (CustomerCartItem $item): array {
-            return [
-                'id' => $item->id,
-                'product_id' => $item->product_id,
-                'code' => $item->product->barcode,
-                'name' => $item->product->name,
-                'image_url' => $item->product->image_path
-                    ? route('products.image', $item->product)
-                    : null,
-                'qty' => $item->qty,
-                'checked_qty' => $item->checked_qty,
-                'is_checked' => $item->is_checked,
-                'price' => (float) $item->price,
-                'line_total' => round($item->qty * (float) $item->price, 2),
-                'stock_quantity' => $item->product->stock_quantity,
-            ];
-        })->values();
-
-        $totalPieces = (int) $items->sum('qty');
-        $grandTotal = round((float) $items->sum('line_total'), 2);
-
-        return [
-            'token' => $cart->token,
-            'cart_url' => route('shop.cart', $cart->token),
-            'customer_name' => $cart->customer_name,
-            'status' => $cart->status,
-            'is_verified' => $cart->is_verified,
-            'verification_code' => $cart->verification_code,
-            'verification_url' => $cart->verification_code
-                ? route('pos.verify', $cart->verification_code)
-                : null,
-            'service_rating' => $cart->service_rating,
-            'service_feedback' => $cart->service_feedback,
-            'rated_at' => $cart->rated_at?->toIso8601String(),
-            'items' => $items,
-            'total_pieces' => $totalPieces,
-            'grand_total' => $grandTotal,
-        ];
     }
 
     private function resolveDeviceToken(Request $request): array

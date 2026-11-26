@@ -21,6 +21,7 @@ class CustomerCart extends Model
         'service_rating',
         'service_feedback',
         'rated_at',
+        'sale_id',
     ];
 
     protected function casts(): array
@@ -42,5 +43,10 @@ class CustomerCart extends Model
     public function customer(): BelongsTo
     {
         return $this->belongsTo(Customer::class);
+    }
+
+    public function sale(): BelongsTo
+    {
+        return $this->belongsTo(Sale::class);
     }
 }

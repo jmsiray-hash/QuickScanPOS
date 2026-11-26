@@ -6,6 +6,7 @@ use App\Models\CashierShift;
 use App\Models\Product;
 use App\Models\Sale;
 use App\Models\SaleItem;
+use App\Models\StoreSetting;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -148,9 +149,12 @@ class SalesController extends Controller
     public function show(Sale $sale): View
     {
         $sale->load(['user', 'customer', 'items', 'voidedBy']);
+        $storeSettings = StoreSetting::current();
 
         $receiptData = [
             'id' => $sale->id,
+            'store_name' => $sale->store_name ?: $storeSettings->store_name,
+            'store_address' => $sale->store_address ?: $storeSettings->store_address,
             'created_at' => $sale->created_at->format('M j, Y g:i A'),
             'cashier' => $sale->user?->name ?? 'Deleted user',
             'customer_name' => $sale->customer_name,
@@ -177,7 +181,7 @@ class SalesController extends Controller
             ])->values(),
         ];
 
-        return view('sales.show', compact('sale', 'receiptData'));
+        return view('sales.show', compact('sale', 'receiptData', 'storeSettings'));
     }
 
     private function shiftTotals(CashierShift $shift): array

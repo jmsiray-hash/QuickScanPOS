@@ -5,7 +5,10 @@
 @section('content')
     <div class="page-actions">
         <h2>Customer List</h2>
-        <a class="button" href="{{ route('customers.create') }}">Create Customer</a>
+        <div class="row-actions">
+            <a class="button button-secondary" href="{{ route('customer-activity.index') }}">Scan &amp; Go Activity</a>
+            <a class="button" href="{{ route('customers.create') }}">Create Customer</a>
+        </div>
     </div>
     <div class="table-wrap">
         <table>

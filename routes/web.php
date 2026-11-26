@@ -11,6 +11,8 @@ use App\Http\Controllers\PhoneProductScanController;
 use App\Http\Controllers\ShopController;
 use App\Http\Controllers\SalesController;
 use App\Http\Controllers\ShiftController;
+use App\Http\Controllers\StoreSettingController;
+use App\Http\Controllers\CustomerActivityController;
 use Illuminate\Support\Facades\Route;
 Route::get('/',[PageController::class,'home'])->name('home');
 Route::get('/home',[PageController::class,'home']);
@@ -40,6 +42,11 @@ Route::post('/mobile-product-scan/{token}',[PhoneProductScanController::class,'s
 Route::post('/mobile-product-scan/{token}/save',[PhoneProductScanController::class,'saveProduct'])->name('products.phone-scan.save');
 Route::get('/products/{product}/image',[ProductController::class,'image'])->name('products.image');
 Route::middleware('auth')->group(function(){
+ Route::get('/customer-activity',[CustomerActivityController::class,'index'])->name('customer-activity.index');
+ Route::get('/customer-activity/{customerCart}',[CustomerActivityController::class,'show'])->name('customer-activity.show');
+ Route::get('/customer-activity/{customerCart}/status',[CustomerActivityController::class,'status'])->name('customer-activity.status');
+ Route::get('/settings/store',[StoreSettingController::class,'edit'])->name('settings.store.edit');
+ Route::put('/settings/store',[StoreSettingController::class,'update'])->name('settings.store.update');
  Route::resource('customers',CustomerController::class);
  Route::get('/users/{user}/avatar',[UserController::class,'avatar'])->name('users.avatar');
  Route::resource('users',UserController::class);

@@ -35,6 +35,10 @@
                 <a href="{{ route('products.index') }}">Products</a>
                 <a href="{{ route('sales.index') }}">Sales Reports</a>
                 <a href="{{ route('customers.index') }}">Customers</a>
+                <a href="{{ route('customer-activity.index') }}">Scan &amp; Go Customers</a>
+                @if (auth()->user()->isAdmin())
+                    <a href="{{ route('settings.store.edit') }}">Settings</a>
+                @endif
                 <a href="{{ route('users.index') }}">Users</a>
                 <form action="{{ route('logout') }}" method="POST">@csrf<button class="button button-secondary" type="submit">Log Out</button></form>
             @else
