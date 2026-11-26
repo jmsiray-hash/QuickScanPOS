@@ -143,6 +143,8 @@ class SalesAndInventoryTest extends TestCase
         $this->get(route('cashier-dashboard'))
         ->assertOk()
         ->assertSee('Cashier dashboard')
+        ->assertSee('Start order')
+        ->assertSee("Today's sales", false)
         ->assertSee('Current sale')
         ->assertSee('Apply discount')
         ->assertSee('Complete payment')
@@ -241,6 +243,42 @@ class SalesAndInventoryTest extends TestCase
             ->assertJsonPath('today_count', 1)
             ->assertJsonPath('scans.0.customer', 'Dashboard Shopper')
             ->assertJsonPath('scans.0.item_count', 2);
+    }
+
+    public function test_cashier_dashboard_sales_report_is_date_filtered_and_scoped_to_the_signed_in_cashier(): void
+    {
+        $cashier = auth()->user();
+        $cashSale = $this->sale('12.50', now());
+        $cashSale->update(['payment_method' => 'cash']);
+        $walletSale = $this->sale('7.50', now());
+        $walletSale->update(['payment_method' => 'gcash']);
+        $voidedSale = $this->sale('4.00', now());
+        $voidedSale->update(['payment_method' => 'cash', 'status' => 'voided']);
+
+        $otherCashier = User::factory()->create();
+        Sale::create([
+            'user_id' => $otherCashier->id,
+            'subtotal' => 100,
+            'tax' => 0,
+            'discount' => 0,
+            'total' => 100,
+            'payment_method' => 'cash',
+            'status' => 'completed',
+        ]);
+
+        $this->getJson(route('cashier-dashboard.sales-report', ['date' => today()->toDateString()]))
+            ->assertOk()
+            ->assertJsonPath('transaction_count', 2)
+            ->assertJsonPath('revenue', 20)
+            ->assertJsonPath('cash_sales', 12.5)
+            ->assertJsonPath('digital_sales', 7.5)
+            ->assertJsonCount(3, 'transactions')
+            ->assertJsonPath('transactions.0.status', 'VOIDED')
+            ->assertJsonPath('transactions.0.void_allowed', false);
+
+        $this->getJson(route('cashier-dashboard.sales-report', ['date' => 'not-a-date']))
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('date');
     }
 
     public function test_checkout_requires_an_open_shift(): void

@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\Product;
 use App\Models\CashierShift;
 use App\Models\CashierCustomerScan;
+use App\Models\Sale;
+use Illuminate\Support\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\View\View;
@@ -80,6 +82,60 @@ class CashierDashboardController extends Controller
                 ->where('cashier_id', $cashierId)
                 ->whereDate('scanned_at', today())
                 ->count(),
+        ]);
+    }
+
+    public function salesReport(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'date' => ['nullable', 'date_format:Y-m-d'],
+        ]);
+        $date = $validated['date'] ?? today()->toDateString();
+        $start = Carbon::parse($date)->startOfDay();
+        $end = Carbon::parse($date)->endOfDay();
+        $cashierId = $request->user()->id;
+
+        $salesForDate = Sale::query()
+            ->where('user_id', $cashierId)
+            ->whereBetween('created_at', [$start, $end]);
+        $summary = (clone $salesForDate)
+            ->where('status', 'completed')
+            ->selectRaw(
+                'COUNT(*) as transaction_count,
+                COALESCE(SUM(total), 0) as revenue,
+                COALESCE(SUM(CASE WHEN payment_method = ? THEN total ELSE 0 END), 0) as cash_sales,
+                COALESCE(SUM(CASE WHEN payment_method <> ? THEN total ELSE 0 END), 0) as digital_sales',
+                ['cash', 'cash'],
+            )
+            ->first();
+
+        $transactions = (clone $salesForDate)
+            ->with(['customer'])
+            ->withCount('items')
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->limit(30)
+            ->get()
+            ->map(static fn (Sale $sale): array => [
+                'id' => $sale->id,
+                'customer' => $sale->customer_name ?: $sale->customer?->full_name,
+                'created_at' => $sale->created_at->format('g:i A'),
+                'payment_method' => strtoupper((string) $sale->payment_method),
+                'status' => strtoupper((string) $sale->status),
+                'total' => (float) $sale->total,
+                'item_count' => (int) $sale->items_count,
+                'receipt_url' => route('sales.show', $sale),
+                'void_allowed' => request()->user()->canVoidSales() && $sale->status === 'completed',
+            ])
+            ->values();
+
+        return response()->json([
+            'date' => $date,
+            'transaction_count' => (int) $summary->transaction_count,
+            'revenue' => (float) $summary->revenue,
+            'cash_sales' => (float) $summary->cash_sales,
+            'digital_sales' => (float) $summary->digital_sales,
+            'transactions' => $transactions,
         ]);
     }
 

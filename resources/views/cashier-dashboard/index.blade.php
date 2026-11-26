@@ -11,10 +11,25 @@
                 <p class="cashier-subtitle">A clear view of your register, live cart and customer check-ins.</p>
             </div>
             <div class="cashier-topbar-actions">
+                <time class="cashier-clock" id="cashier-clock"></time>
+                <button type="button" class="report-quick-link" data-cashier-view="sales-report">
+                    <span class="report-quick-icon" aria-hidden="true">₱</span>
+                    <span>Today's sales <strong id="header-sales-total">₱0.00</strong></span>
+                </button>
                 <button type="button" class="report-quick-link" data-cashier-view="scan-report">
                     <span class="report-quick-icon" aria-hidden="true">⌁</span>
                     <span>Customer scans <strong id="header-scan-count">{{ $todayScanCount }}</strong></span>
                 </button>
+                <a class="report-quick-link" href="{{ route('customer-activity.index') }}">
+                    <span class="report-quick-icon" aria-hidden="true">◉</span>
+                    <span>Customer carts</span>
+                </a>
+                @if (auth()->user()->isAdmin())
+                    <a class="report-quick-link" href="{{ route('settings.store.edit') }}">
+                        <span class="report-quick-icon" aria-hidden="true">⚙</span>
+                        <span>Settings</span>
+                    </a>
+                @endif
                 <div class="cashier-shift-state {{ $activeShift ? 'is-open' : 'is-closed' }}">
                     <span class="shift-dot"></span>
                     {{ $activeShift ? 'SHIFT OPEN' : 'SHIFT NOT OPEN' }}
@@ -52,6 +67,9 @@
                         <span aria-hidden="true">⌁</span> Customer QR report
                         <span class="report-count" id="report-scan-count">{{ $todayScanCount }}</span>
                     </button>
+                    <button class="catalog-view-tab" type="button" role="tab" aria-selected="false" data-cashier-view="sales-report">
+                        <span aria-hidden="true">₱</span> Sales report
+                    </button>
                 </div>
                 <div id="catalog-view" class="catalog-view">
                 <div class="catalog-toolbar">
@@ -63,6 +81,7 @@
                         <input id="catalog-search" name="search" value="{{ $search }}" placeholder="Search product name or barcode..." autocomplete="off">
                         <button class="cashier-primary-button" type="submit">Search</button>
                     </form>
+                    <button id="voice-search" class="voice-search-button" type="button" hidden>Speak</button>
                     <a class="store-qr-shortcut" href="{{ route('pos.store-qr') }}" aria-label="Show store entrance QR">▦</a>
                 </div>
                 <nav class="category-tabs" aria-label="Product categories">
@@ -124,6 +143,30 @@
                         <p id="report-refresh-status">Updated just now</p>
                     </div>
                     <div id="scan-report-list" class="scan-report-list" aria-live="polite"></div>
+                </section>
+                <section id="sales-report-view" class="sales-report-view" role="tabpanel" hidden>
+                    <div class="sales-report-heading">
+                        <div>
+                            <p class="sales-report-kicker">REGISTER PERFORMANCE</p>
+                            <h2>Today's sales</h2>
+                            <p>Completed sales attributed to your cashier account.</p>
+                        </div>
+                        <a class="sales-full-report" href="{{ route('sales.index') }}">Full sales reports <span aria-hidden="true">↗</span></a>
+                    </div>
+                    <div class="sales-report-controls">
+                        <label for="sales-report-date">Business date</label>
+                        <input id="sales-report-date" type="date" value="{{ today()->toDateString() }}">
+                        <button id="refresh-sales-report" class="sales-refresh-button" type="button">Refresh</button>
+                        <span id="sales-report-state" role="status">Ready</span>
+                    </div>
+                    <div class="sales-metric-grid">
+                        <article class="sales-metric sales-metric-primary"><span>Net completed sales</span><strong id="sales-total">₱0.00</strong></article>
+                        <article class="sales-metric"><span>Transactions</span><strong id="sales-count">0</strong></article>
+                        <article class="sales-metric"><span>Cash</span><strong id="sales-cash">₱0.00</strong></article>
+                        <article class="sales-metric"><span>Digital / card</span><strong id="sales-digital">₱0.00</strong></article>
+                    </div>
+                    <div class="sales-transaction-heading"><h3>Recent transactions</h3><span>Latest 30 for selected date</span></div>
+                    <div id="sales-transaction-list" class="sales-transaction-list" aria-live="polite"></div>
                 </section>
             </section>
 
@@ -187,6 +230,23 @@
                 <p class="cart-footnote">Payments are recorded to your open cashier shift.</p>
             </aside>
         </div>
+        <nav class="cashier-action-tray" aria-label="Cashier quick actions">
+            <button type="button" class="tray-action tray-action-primary" id="start-order">
+                <span aria-hidden="true">＋</span><span>Start order</span>
+            </button>
+            <button type="button" class="tray-action is-selected" data-cashier-view="catalog">
+                <span aria-hidden="true">▦</span><span>Menu</span>
+            </button>
+            <button type="button" class="tray-action" data-cashier-view="sales-report">
+                <span aria-hidden="true">₱</span><span>Today's sales</span>
+            </button>
+            <button type="button" class="tray-action" data-cashier-view="scan-report">
+                <span aria-hidden="true">⌁</span><span>QR activity</span>
+            </button>
+            <a class="tray-action" href="{{ route('customer-activity.index') }}">
+                <span aria-hidden="true">◉</span><span>Customer carts</span>
+            </a>
+        </nav>
 
         <dialog id="sale-complete-dialog" class="sale-dialog">
             <div class="sale-dialog-icon">✓</div>
@@ -208,8 +268,10 @@
             const vatRate = @json((float) config('pos.vat_rate', 0));
             const hasOpenShift = @json($activeShift !== null);
             const scanReportUrl = @json(route('cashier-dashboard.scan-report'));
+            const salesReportUrl = @json(route('cashier-dashboard.sales-report'));
             let scanReports = @json($scanReports);
             let cart = null;
+            let orderStarted = false;
             let paymentMethod = 'cash';
             let submitting = false;
 
@@ -267,20 +329,64 @@
                 renderScanReports(result.scans, result.today_count);
                 document.getElementById('report-refresh-status').textContent = 'Updated just now';
             }
+            function renderSalesReport(report) {
+                document.getElementById('header-sales-total').textContent = money(report.revenue);
+                document.getElementById('sales-total').textContent = money(report.revenue);
+                document.getElementById('sales-count').textContent = String(report.transaction_count);
+                document.getElementById('sales-cash').textContent = money(report.cash_sales);
+                document.getElementById('sales-digital').textContent = money(report.digital_sales);
+                const list = document.getElementById('sales-transaction-list');
+                if (!report.transactions.length) {
+                    list.innerHTML = '<div class="sales-report-empty"><span aria-hidden="true">₱</span><strong>No transactions for this date</strong><p>Completed sales from your register will appear here.</p></div>';
+                    return;
+                }
+                list.innerHTML = report.transactions.map(sale => `
+                    <article class="sales-transaction-row ${sale.status === 'VOIDED' ? 'is-voided' : ''}">
+                        <span class="sales-transaction-id">#${Number(sale.id)}</span>
+                        <div class="sales-transaction-customer">
+                            <strong>${escapeHtml(sale.customer || 'Walk-in customer')}</strong>
+                            <span>${Number(sale.item_count)} ${Number(sale.item_count) === 1 ? 'item' : 'items'} · ${escapeHtml(sale.created_at)}</span>
+                        </div>
+                        <span class="sales-method">${escapeHtml(sale.payment_method)}</span>
+                        <span class="sales-transaction-status">${escapeHtml(sale.status)}</span>
+                        <strong class="sales-transaction-total">${money(sale.total)}</strong>
+                        <a class="sales-receipt-link" href="${escapeHtml(sale.receipt_url)}" aria-label="View receipt for sale ${Number(sale.id)}">↗</a>
+                    </article>
+                `).join('');
+            }
+            async function refreshSalesReport() {
+                const state = document.getElementById('sales-report-state');
+                state.textContent = 'Refreshing…';
+                try {
+                    const date = document.getElementById('sales-report-date').value;
+                    const result = await request(salesReportUrl + '?date=' + encodeURIComponent(date));
+                    renderSalesReport(result);
+                    state.textContent = 'Updated just now';
+                } catch (error) {
+                    state.textContent = error.message || 'Unable to refresh sales report';
+                    throw error;
+                }
+            }
             function showCashierView(viewName) {
                 const showReport = viewName === 'scan-report';
-                document.getElementById('catalog-view').hidden = showReport;
+                const showSales = viewName === 'sales-report';
+                document.getElementById('catalog-view').hidden = showReport || showSales;
                 document.getElementById('scan-report-view').hidden = !showReport;
+                document.getElementById('sales-report-view').hidden = !showSales;
                 document.querySelectorAll('.catalog-view-tab').forEach(tab => {
                     const selected = tab.dataset.cashierView === viewName;
                     tab.classList.toggle('is-active', selected);
                     tab.setAttribute('aria-selected', String(selected));
+                });
+                document.querySelectorAll('.tray-action[data-cashier-view]').forEach(button => {
+                    button.classList.toggle('is-selected', button.dataset.cashierView === viewName);
                 });
                 if (showReport) {
                     refreshScanReport().catch(() => {
                         document.getElementById('report-refresh-status').textContent = 'Unable to refresh the scan report';
                     });
                 }
+                if (showSales) refreshSalesReport().catch(() => {});
             }
             function paymentTotals() {
                 if (!cart) return { total: 0, discount: 0, tax: 0 };
@@ -354,6 +460,7 @@
             async function refreshCart() {
                 const result = await request(@json(route('pos.cart.contents')));
                 renderCart(result.cart);
+                if (result.cart.items?.length) orderStarted = true;
             }
             async function setQuantity(productId, quantity) {
                 try {
@@ -369,6 +476,11 @@
 
             document.querySelectorAll('.add-product-button').forEach(button => {
                 button.addEventListener('click', async () => {
+                    if (!orderStarted) {
+                        inform('Start an order before adding products. Your cart will stay ready here.', true);
+                        document.getElementById('start-order').focus();
+                        return;
+                    }
                     const productId = Number(button.dataset.productId);
                     const item = cart?.items?.find(line => Number(line.product_id) === productId);
                     const quantity = Number(item?.quantity || 0) + 1;
@@ -414,7 +526,14 @@
                     cart = result.cart;
                 }
                 renderCart(cart);
+                orderStarted = false;
                 inform('Cart cleared.');
+            });
+            document.getElementById('start-order').addEventListener('click', () => {
+                orderStarted = true;
+                showCashierView('catalog');
+                document.getElementById('catalog-search').focus();
+                inform(cart?.items?.length ? 'Order ready. Continue editing the current cart.' : 'New order started. Search or choose a product to add.');
             });
 
             document.getElementById('open-discount').addEventListener('click', event => {
@@ -454,6 +573,7 @@
                     document.getElementById('sale-complete-message').textContent = `Sale #${result.sale_id} · Paid ${money(result.receipt.total)} by ${paymentMethod.toUpperCase()}.`;
                     document.getElementById('sale-receipt-link').href = result.receipt_url;
                     document.getElementById('sale-complete-dialog').showModal();
+                    orderStarted = false;
                     document.getElementById('cash-received').value = '';
                     document.getElementById('payment-reference').value = '';
                     document.getElementById('discount-type').value = '';
@@ -479,12 +599,65 @@
             document.querySelectorAll('[data-cashier-view]').forEach(button => {
                 button.addEventListener('click', () => showCashierView(button.dataset.cashierView));
             });
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            const voiceButton = document.getElementById('voice-search');
+            if (SpeechRecognition) {
+                voiceButton.hidden = false;
+                voiceButton.addEventListener('click', () => {
+                    const recognition = new SpeechRecognition();
+                    recognition.lang = document.documentElement.lang || 'en';
+                    recognition.interimResults = false;
+                    recognition.maxAlternatives = 1;
+                    voiceButton.disabled = true;
+                    voiceButton.textContent = 'Listening…';
+                    inform('Listening for a product or category.');
+                    recognition.onresult = event => {
+                        const spoken = String(event.results[0][0].transcript || '').trim();
+                        if (!spoken) {
+                            inform('No search phrase was recognized. Try again.', true);
+                            return;
+                        }
+                        const matchingCategory = Array.from(document.querySelectorAll('.category-tabs a'))
+                            .find(link => link.textContent.trim().toLowerCase() === spoken.toLowerCase());
+                        if (matchingCategory) {
+                            window.location.assign(matchingCategory.href);
+                            return;
+                        }
+                        document.getElementById('catalog-search').value = spoken;
+                        document.querySelector('.catalog-search').requestSubmit();
+                    };
+                    recognition.onerror = event => inform('Voice search failed: ' + event.error + '. You can type in the product search.', true);
+                    recognition.onend = () => {
+                        voiceButton.disabled = false;
+                        voiceButton.textContent = 'Speak';
+                    };
+                    try {
+                        recognition.start();
+                    } catch (error) {
+                        voiceButton.disabled = false;
+                        voiceButton.textContent = 'Speak';
+                        inform(error.message || 'Voice search could not start. You can type in the product search.', true);
+                    }
+                });
+            }
+            function updateClock() {
+                const now = new Date();
+                document.getElementById('cashier-clock').textContent = new Intl.DateTimeFormat(undefined, {
+                    weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+                }).format(now);
+            }
+            updateClock();
+            window.setInterval(updateClock, 30000);
+            document.getElementById('refresh-sales-report').addEventListener('click', () => refreshSalesReport().catch(() => {}));
+            document.getElementById('sales-report-date').addEventListener('change', () => refreshSalesReport().catch(() => {}));
             renderScanReports(scanReports, {{ $todayScanCount }});
+            refreshSalesReport().catch(() => {});
             window.setInterval(() => {
                 if (document.visibilityState === 'visible') {
                     refreshScanReport().catch(() => {
                         document.getElementById('report-refresh-status').textContent = 'Unable to refresh the scan report';
                     });
+                    refreshSalesReport().catch(() => {});
                 }
             }, 15000);
             refreshCart().catch(error => inform(error.message, true));
@@ -512,7 +685,8 @@
         .cashier-topbar h1 { color:#f8fafc; font-size:1.48rem; letter-spacing:-.035em; margin:0; }
         .cashier-subtitle { color:#8ea1b1; font-size:.7rem; margin:1px 0 0; }
         .cashier-topbar-actions { align-items:center; display:flex; gap:10px; }
-        .report-quick-link { align-items:center; background:linear-gradient(135deg,#132935,#10212c); border:1px solid #294253; border-radius:9px; color:#c7d7e2; cursor:pointer; display:flex; font:inherit; font-size:.7rem; gap:8px; padding:7px 10px; transition:border-color .18s,transform .18s; }
+        .cashier-clock { color:#8ea1b1; font-size:.65rem; font-variant-numeric:tabular-nums; white-space:nowrap; }
+        .report-quick-link { align-items:center; background:linear-gradient(135deg,#132935,#10212c); border:1px solid #294253; border-radius:9px; color:#c7d7e2; cursor:pointer; display:flex; font:inherit; font-size:.7rem; gap:8px; padding:7px 10px; text-decoration:none; transition:border-color .18s,transform .18s; }
         .report-quick-link:hover { border-color:#27b9a7; transform:translateY(-1px); }
         .report-quick-link strong { background:#0d645b; border-radius:999px; color:#d5fff3; margin-left:3px; min-width:20px; padding:2px 6px; }
         .report-quick-icon { color:#5eead4; font-size:1.1rem; }
@@ -539,7 +713,7 @@
         .catalog-pane,.cart-pane { background:linear-gradient(145deg,rgba(20,34,47,.97),rgba(14,26,37,.98)); border:1px solid #294051; border-radius:13px; box-shadow:0 18px 42px rgba(0,0,0,.2),inset 0 1px rgba(255,255,255,.025); min-height:0; min-width:0; }
         .catalog-pane { display:flex; flex-direction:column; overflow:hidden; padding:14px; }
         .catalog-view { display:flex; flex:1; flex-direction:column; min-height:0; }
-        .catalog-view[hidden],.scan-report-view[hidden] { display:none; }
+        .catalog-view[hidden],.scan-report-view[hidden],.sales-report-view[hidden] { display:none; }
         .catalog-view-switch { align-items:center; border-bottom:1px solid #253a49; display:flex; flex:none; gap:5px; margin:-2px 0 10px; padding-bottom:9px; }
         .catalog-view-tab { align-items:center; background:transparent; border:1px solid transparent; border-radius:7px; color:#9eafbc; cursor:pointer; display:inline-flex; font:inherit; font-size:.7rem; gap:7px; padding:6px 9px; transition:background .18s,color .18s,border-color .18s; }
         .catalog-view-tab:hover { background:#1a2c39; color:#eaf4f5; }
@@ -549,6 +723,8 @@
         .catalog-search { display:flex; flex:1; gap:8px; min-width:0; }
         .catalog-search input { background:#0c1822; border:1px solid #2c4052; border-radius:7px; color:#f8fafc; flex:1; font:inherit; min-width:0; padding:8px 11px; }
         .catalog-search input::placeholder { color:#8394a5; }
+        .voice-search-button { background:#17343b; border:1px solid #2e6b68; border-radius:7px; color:#b4f1de; cursor:pointer; font:inherit; font-size:.68rem; padding:6px 9px; }
+        .voice-search-button:disabled { cursor:wait; opacity:.65; }
         .store-qr-shortcut { align-items:center; background:#1c3041; border:1px solid #30485d; border-radius:7px; color:#a7f3d0; display:flex; font-size:1.2rem; justify-content:center; text-decoration:none; width:38px; }
         .category-tabs { display:flex; flex:none; gap:6px; margin:9px 0; overflow-x:auto; padding-bottom:2px; }
         .category-tabs a { background:#1a2936; border:1px solid #2a3c4c; border-radius:999px; color:#c6d2de; flex:none; font-size:.7rem; padding:5px 9px; text-decoration:none; }
@@ -622,6 +798,13 @@
         .sale-dialog h2 { color:#f8fafc; margin:0; }
         .sale-dialog p { color:#b5c3cf; }
         .sale-dialog-actions { display:flex; gap:10px; justify-content:center; }
+        .cashier-action-tray { align-items:center; background:linear-gradient(100deg,#10212c,#132936); border:1px solid #2b4351; border-radius:10px; box-shadow:0 10px 24px rgba(0,0,0,.2); display:flex; flex:none; gap:6px; justify-content:center; margin-top:9px; padding:5px; }
+        .tray-action { align-items:center; background:transparent; border:1px solid transparent; border-radius:7px; color:#aebdc8; cursor:pointer; display:flex; font:inherit; font-size:.65rem; gap:6px; justify-content:center; min-width:105px; padding:6px 10px; text-decoration:none; }
+        .tray-action>span:first-child { color:#70deca; font-size:.95rem; }
+        .tray-action:hover,.tray-action.is-selected { background:#1b3441; border-color:#335161; color:#f0f8fa; }
+        .tray-action-primary { background:linear-gradient(110deg,#16a991,#0e8178); color:#fff; font-weight:800; }
+        .tray-action-primary>span:first-child { color:#d5fff3; }
+        .tray-action-primary:hover { background:linear-gradient(110deg,#1bbda1,#11958b); border-color:#4ac7ae; }
         .scan-report-view { display:flex; flex:1; flex-direction:column; min-height:0; overflow:hidden; }
         .scan-report-heading { align-items:center; display:flex; flex:none; justify-content:space-between; padding:5px 4px 10px; }
         .scan-report-heading h2 { color:#f4fafb; font-size:1.15rem; letter-spacing:-.02em; margin:0; }
@@ -652,6 +835,43 @@
         .scan-report-empty>span { color:#4e8d82; font-size:2rem; }
         .scan-report-empty strong { color:#d3e2e8; font-size:.85rem; }
         .scan-report-empty p { font-size:.68rem; margin:3px 0; }
+        .sales-report-view { background:linear-gradient(145deg,#fff,#f3f8f8); border:1px solid #d5e5e3; border-radius:11px; box-shadow:0 12px 30px rgba(2,12,22,.14); color:#17212b; display:flex; flex:1; flex-direction:column; min-height:0; overflow:hidden; padding:14px; }
+        .sales-report-heading { align-items:center; display:flex; flex:none; justify-content:space-between; padding:1px 2px 9px; }
+        .sales-report-kicker { color:#0f766e; font-size:.56rem; font-weight:800; letter-spacing:.13em; margin:0 0 2px; }
+        .sales-report-heading h2 { color:#142a34; font-size:1.13rem; letter-spacing:-.02em; margin:0; }
+        .sales-report-heading p:not(.sales-report-kicker) { color:#71818a; font-size:.66rem; margin:2px 0 0; }
+        .sales-full-report { background:#e9f7f3; border:1px solid #b8e3d8; border-radius:7px; color:#11685d; font-size:.65rem; font-weight:700; padding:6px 9px; text-decoration:none; }
+        .sales-report-controls { align-items:center; background:#f0f7f7; border:1px solid #d9e8e7; border-radius:8px; display:flex; flex:none; gap:7px; margin-bottom:9px; padding:6px 8px; }
+        .sales-report-controls label { color:#50636c; font-size:.63rem; font-weight:700; }
+        .sales-report-controls input { background:white; border:1px solid #cbd9d8; border-radius:5px; color:#24353d; font:inherit; font-size:.67rem; padding:5px 7px; }
+        .sales-refresh-button { background:#e3f5ef; border:1px solid #b2dfd1; border-radius:5px; color:#126657; cursor:pointer; font:inherit; font-size:.64rem; font-weight:700; padding:5px 8px; }
+        .sales-report-controls>span { color:#71838b; font-size:.6rem; margin-left:auto; }
+        .sales-metric-grid { display:grid; flex:none; gap:7px; grid-template-columns:1.25fr repeat(3,minmax(0,1fr)); margin-bottom:10px; }
+        .sales-metric { background:#fff; border:1px solid #dce8e7; border-radius:8px; display:grid; gap:3px; padding:8px 10px; }
+        .sales-metric-primary { background:linear-gradient(125deg,#e7faf4,#f4fbfa); border-color:#afe1d4; }
+        .sales-metric span { color:#667b82; font-size:.58rem; }
+        .sales-metric strong { color:#263942; font-size:1rem; font-variant-numeric:tabular-nums; }
+        .sales-metric-primary strong { color:#087c6c; font-size:1.16rem; }
+        .sales-transaction-heading { align-items:center; display:flex; flex:none; justify-content:space-between; padding:0 2px 5px; }
+        .sales-transaction-heading h3 { color:#253943; font-size:.74rem; margin:0; }
+        .sales-transaction-heading span { color:#829198; font-size:.57rem; }
+        .sales-transaction-list { flex:1; min-height:0; overflow:auto; }
+        .sales-transaction-row { align-items:center; border-bottom:1px solid #e3eceb; display:grid; gap:8px; grid-template-columns:38px minmax(0,1fr) 64px 76px 76px 26px; min-height:47px; padding:5px 3px; }
+        .sales-transaction-row:hover { background:#f0f9f7; }
+        .sales-transaction-row.is-voided { background:#fff4f3; }
+        .sales-transaction-id { color:#638078; font-size:.64rem; font-weight:800; }
+        .sales-transaction-customer { display:grid; min-width:0; }
+        .sales-transaction-customer strong { color:#273a42; font-size:.66rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .sales-transaction-customer span { color:#839197; font-size:.56rem; }
+        .sales-method { color:#567078; font-size:.57rem; font-weight:700; }
+        .sales-transaction-status { background:#e8f7ef; border-radius:999px; color:#16734f; font-size:.52rem; font-weight:800; justify-self:start; padding:2px 6px; }
+        .is-voided .sales-transaction-status { background:#fde4e2; color:#a7332c; }
+        .sales-transaction-total { color:#1e3d41; font-size:.66rem; font-variant-numeric:tabular-nums; text-align:right; }
+        .sales-receipt-link { align-items:center; border:1px solid #cbdedb; border-radius:5px; color:#157264; display:flex; font-size:.75rem; height:23px; justify-content:center; text-decoration:none; width:23px; }
+        .sales-report-empty { align-items:center; color:#829198; display:flex; flex-direction:column; justify-content:center; min-height:145px; text-align:center; }
+        .sales-report-empty>span { color:#65a89c; font-size:1.7rem; }
+        .sales-report-empty strong { color:#40565e; font-size:.74rem; }
+        .sales-report-empty p { font-size:.62rem; margin:2px 0; }
         .sr-only { height:1px; margin:-1px; overflow:hidden; position:absolute; width:1px; clip:rect(0,0,0,0); }
         @media(max-width:1100px) and (min-width:741px) { .product-grid { grid-template-columns:repeat(3,minmax(0,1fr)); } }
         @media(max-height:700px) and (min-width:741px) {
@@ -659,6 +879,9 @@
             .cashier-app-main { height:calc(100vh - 48px); }
             .cashier-topbar { margin-bottom:4px; min-height:36px; }
             .cashier-topbar h1 { font-size:1.15rem; }
+            .cashier-topbar-actions { gap:5px; }
+            .report-quick-link { padding:5px 7px; }
+            .cashier-action-tray { margin-top:6px; }
             .catalog-pane,.cart-pane { padding:8px; }
             .catalog-product-image { height:58px; }
             .catalog-product-details { padding:5px; }
@@ -673,7 +896,11 @@
             .cashier-workspace { flex:none; grid-template-columns:1fr; }
             .catalog-pane { max-height:65vh; min-height:360px; }
             .scan-report-view { min-height:360px; }
+            .sales-report-view { min-height:360px; }
             .scan-report-row { grid-template-columns:32px minmax(0,1fr) auto 70px 26px; }
+            .sales-metric-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+            .sales-transaction-row { grid-template-columns:34px minmax(0,1fr) 54px 66px 68px 24px; }
+            .sales-report-controls { flex-wrap:wrap; }
             .product-grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
             .cart-pane { min-height:400px; position:static; }
             .cart-lines { flex:none; max-height:260px; min-height:90px; }
@@ -688,6 +915,21 @@
             .catalog-pane,.cart-pane { padding:10px; }
             .catalog-product-image { height:82px; }
             .cashier-app-main { padding:0; }
+            .cashier-topbar { flex-wrap:wrap; }
+            .cashier-topbar-actions { flex-wrap:wrap; justify-content:flex-start; }
+            .report-quick-link { font-size:.61rem; }
+            .cashier-clock { display:none; }
+            .catalog-view-switch { overflow-x:auto; }
+            .catalog-view-tab { flex:none; }
+            .cashier-action-tray { bottom:0; justify-content:space-around; margin:8px -2px 0; position:sticky; z-index:5; }
+            .tray-action { flex:1; min-width:0; padding:7px 3px; }
+            .tray-action span:last-child { font-size:.57rem; }
+            .sales-transaction-row { grid-template-columns:31px minmax(0,1fr) auto 60px 24px; }
+            .sales-method { display:none; }
+        }
+        @media(prefers-reduced-motion:reduce) {
+            .catalog-product,.catalog-view-tab,.report-quick-link { transition:none; }
+            .catalog-product:hover,.report-quick-link:hover { transform:none; }
         }
     </style>
 @endsection
