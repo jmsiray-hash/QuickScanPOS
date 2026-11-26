@@ -10,6 +10,7 @@ class CustomerCart extends Model
 {
     protected $fillable = [
         'customer_id',
+        'device_token',
         'token',
         'verification_code',
         'is_verified',
@@ -17,6 +18,9 @@ class CustomerCart extends Model
         'customer_name',
         'status',
         'expires_at',
+        'service_rating',
+        'service_feedback',
+        'rated_at',
     ];
 
     protected function casts(): array
@@ -25,6 +29,8 @@ class CustomerCart extends Model
             'is_verified' => 'boolean',
             'verified_at' => 'datetime',
             'expires_at' => 'datetime',
+            'service_rating' => 'integer',
+            'rated_at' => 'datetime',
         ];
     }
 

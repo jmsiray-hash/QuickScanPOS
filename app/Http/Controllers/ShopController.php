@@ -5,35 +5,64 @@ namespace App\Http\Controllers;
 use App\Models\CustomerCart;
 use App\Models\CustomerCartItem;
 use App\Models\Product;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cookie;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
 
 class ShopController extends Controller
 {
-    public function entry(): View
+    private const DEVICE_COOKIE = 'qsp_device';
+
+    public function entry(Request $request): Response
     {
-        return view('shop.entry', [
-            'customer' => Auth::guard('customer')->user(),
+        [$deviceToken, $cookie] = $this->resolveDeviceToken($request);
+        $customer = Auth::guard('customer')->user();
+        $activeCart = $this->activeCartForDevice($deviceToken, $customer?->id);
+
+        $response = response()->view('shop.entry', [
+            'customer' => $customer,
+            'activeCart' => $activeCart,
+            'activeCartData' => $activeCart ? $this->cartData($activeCart) : null,
         ]);
+
+        if ($cookie !== null) {
+            $response->withCookie($cookie);
+        }
+
+        return $response;
     }
 
     public function start(Request $request): RedirectResponse
     {
+        [$deviceToken, $cookie] = $this->resolveDeviceToken($request);
         $customer = Auth::guard('customer')->user();
         $validated = $request->validate([
             'customer_name' => ['nullable', 'string', 'max:100'],
             'guest' => ['nullable', 'boolean'],
+            'resume' => ['nullable', 'boolean'],
         ]);
         $guest = $request->boolean('guest') || $customer === null;
         $customerName = trim((string) ($validated['customer_name'] ?? ''));
 
+        $activeCart = $this->activeCartForDevice($deviceToken, $customer?->id);
+        if ($request->boolean('resume') && $activeCart !== null) {
+            $redirect = to_route('shop.cart', $activeCart->token);
+            if ($cookie !== null) {
+                $redirect->withCookie($cookie);
+            }
+
+            return $redirect;
+        }
+
         $cart = CustomerCart::create([
             'customer_id' => $guest ? null : $customer->id,
+            'device_token' => $deviceToken,
             'token' => $this->newCode('CART-'),
             'customer_name' => $guest
                 ? ($customerName !== '' ? $customerName : 'Guest Shopper')
@@ -42,7 +71,12 @@ class ShopController extends Controller
             'expires_at' => now()->addHours(2),
         ]);
 
-        return to_route('shop.cart', $cart->token);
+        $redirect = to_route('shop.cart', $cart->token);
+        if ($cookie !== null) {
+            $redirect->withCookie($cookie);
+        }
+
+        return $redirect;
     }
 
     public function show(string $token): View
@@ -53,6 +87,16 @@ class ShopController extends Controller
         return view('shop.cart', [
             'cart' => $cart,
             'cartData' => $this->cartData($cart),
+        ]);
+    }
+
+    public function status(string $token): JsonResponse
+    {
+        $cart = $this->findCart($token);
+        $this->expireIfNeeded($cart);
+
+        return response()->json([
+            'cart' => $this->cartData($cart),
         ]);
     }
 
@@ -174,6 +218,37 @@ class ShopController extends Controller
         ]);
     }
 
+    public function rate(Request $request, string $token): JsonResponse
+    {
+        $cart = $this->findCart($token);
+        $this->expireIfNeeded($cart);
+        if ($cart->status !== 'paid') {
+            return response()->json(['message' => 'You can rate the service after checkout is complete.'], 409);
+        }
+        if ($cart->rated_at !== null) {
+            return response()->json([
+                'message' => 'Thank you, your rating has already been recorded.',
+                'cart' => $this->cartData($cart),
+            ]);
+        }
+
+        $validated = $request->validate([
+            'rating' => ['required', 'integer', 'min:1', 'max:5'],
+            'feedback' => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        $cart->update([
+            'service_rating' => (int) $validated['rating'],
+            'service_feedback' => trim((string) ($validated['feedback'] ?? '')) ?: null,
+            'rated_at' => now(),
+        ]);
+
+        return response()->json([
+            'message' => 'Thank you for rating our service!',
+            'cart' => $this->cartData($cart->fresh()),
+        ]);
+    }
+
     private function findCart(string $token): CustomerCart
     {
         $cart = CustomerCart::query()
@@ -244,10 +319,59 @@ class ShopController extends Controller
             'verification_url' => $cart->verification_code
                 ? route('pos.verify', $cart->verification_code)
                 : null,
+            'service_rating' => $cart->service_rating,
+            'service_feedback' => $cart->service_feedback,
+            'rated_at' => $cart->rated_at?->toIso8601String(),
             'items' => $items,
             'total_pieces' => $totalPieces,
             'grand_total' => $grandTotal,
         ];
+    }
+
+    private function resolveDeviceToken(Request $request): array
+    {
+        $existing = $request->cookie(self::DEVICE_COOKIE);
+        if (is_string($existing) && preg_match('/\A[A-Za-z0-9\-]{20,64}\z/', $existing) === 1) {
+            return [$existing, null];
+        }
+
+        $token = (string) Str::uuid();
+        $cookie = Cookie::make(self::DEVICE_COOKIE, $token, 60 * 24 * 30, '/', null, $request->isSecure(), false, false, 'Lax');
+
+        return [$token, $cookie];
+    }
+
+    private function activeCartForDevice(string $deviceToken, ?int $customerId): ?CustomerCart
+    {
+        $query = CustomerCart::query()
+            ->whereIn('status', ['shopping', 'ready_for_checkout', 'verified_ready'])
+            ->where(function ($builder) use ($deviceToken, $customerId): void {
+                $builder->where('device_token', $deviceToken);
+                if ($customerId !== null) {
+                    $builder->orWhere('customer_id', $customerId);
+                }
+            })
+            ->where(function ($builder): void {
+                $builder->whereNull('expires_at')->orWhere('expires_at', '>', now());
+            })
+            ->latest('updated_at');
+
+        $cart = $query->first();
+        if ($cart !== null) {
+            $this->expireIfNeededSilently($cart);
+            if ($cart->status === 'expired') {
+                return null;
+            }
+        }
+
+        return $cart;
+    }
+
+    private function expireIfNeededSilently(CustomerCart $cart): void
+    {
+        if ($cart->expires_at !== null && $cart->expires_at->isPast() && $cart->status !== 'paid') {
+            $cart->update(['status' => 'expired']);
+        }
     }
 
     private function newCode(string $prefix): string

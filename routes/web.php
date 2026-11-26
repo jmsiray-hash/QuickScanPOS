@@ -22,9 +22,11 @@ Route::post('/shop/register',[CustomerAuthController::class,'register'])->name('
 Route::post('/shop/logout',[CustomerAuthController::class,'logout'])->name('shop.logout');
 Route::post('/shop',[ShopController::class,'start'])->name('shop.start');
 Route::get('/shop/cart/{token}',[ShopController::class,'show'])->name('shop.cart');
+Route::get('/shop/cart/{token}/status',[ShopController::class,'status'])->name('shop.cart.status');
 Route::post('/shop/cart/{token}/scan',[ShopController::class,'scan'])->name('shop.cart.scan');
 Route::put('/shop/cart/{token}/items/{item}',[ShopController::class,'updateItem'])->name('shop.cart.item.update');
 Route::post('/shop/cart/{token}/finalize',[ShopController::class,'finalize'])->name('shop.cart.finalize');
+Route::post('/shop/cart/{token}/rate',[ShopController::class,'rate'])->name('shop.cart.rate');
 Route::get('/pos/verify/{code}',[PosVerificationController::class,'show'])->name('pos.verify');
 Route::post('/pos/verify/{code}/check-item',[PosVerificationController::class,'checkItem'])->name('pos.verify.check');
 Route::get('/mobile-product-scan/{token}',[PhoneProductScanController::class,'show'])->name('products.phone-scan.mobile');

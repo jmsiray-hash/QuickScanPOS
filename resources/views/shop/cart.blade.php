@@ -32,6 +32,22 @@
             <p>The same QR works on the cashier POS to load your cart and on the cashier phone to open the item scanner.</p>
             <p>Keep this page open until checkout is complete.</p>
         </section>
+        <section id="paid-panel" class="qr-panel" hidden>
+            <h3>Transaction Complete</h3>
+            <p>Your checkout is complete. Thank you for shopping at QuickScanPos.</p>
+            <div id="rating-form-wrap">
+                <p><strong>Rate our service</strong></p>
+                <div class="rating-stars" role="radiogroup" aria-label="Service rating">
+                    @for ($i = 1; $i <= 5; $i++)
+                        <label class="rating-star"><input type="radio" name="service_rating" value="{{ $i }}"> {{ $i }}★</label>
+                    @endfor
+                </div>
+                <label for="service-feedback">Feedback (optional)</label>
+                <textarea id="service-feedback" rows="3" maxlength="1000" placeholder="Tell us about your experience"></textarea>
+                <button id="submit-rating" class="button" type="button">Submit Rating</button>
+            </div>
+            <p id="rating-thanks" hidden></p>
+        </section>
     </section>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
@@ -41,13 +57,18 @@
             const csrf = document.querySelector('meta[name="csrf-token"]').content;
             const scanUrl = @json(route('shop.cart.scan', $cart->token));
             const finalizeUrl = @json(route('shop.cart.finalize', $cart->token));
+            const rateUrl = @json(route('shop.cart.rate', $cart->token));
+            const statusUrl = @json(route('shop.cart.status', $cart->token));
             const itemUrl = @json(route('shop.cart.item.update', ['token' => $cart->token, 'item' => 'ITEM_ID']));
             const body = document.getElementById('shop-cart-items');
             const summary = document.getElementById('shop-summary');
             const message = document.getElementById('shop-message');
             const finish = document.getElementById('finish-shopping');
+            const paidPanel = document.getElementById('paid-panel');
+            const ratingFormWrap = document.getElementById('rating-form-wrap');
+            const ratingThanks = document.getElementById('rating-thanks');
             let cart = initialCart;
-            const editable = cart.status === 'shopping';
+            let pollTimer = null;
 
             const escapeHtml = value => String(value).replace(/[&<>"']/g, char => ({
                 '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
@@ -68,12 +89,44 @@
                     },
                     body: method === 'GET' ? undefined : JSON.stringify(data),
                 });
-                const result = await response.json();
+                const result = await response.json().catch(() => ({}));
                 if (!response.ok) throw new Error(result.message || 'The request could not be completed.');
                 return result;
             };
 
+            const schedulePoll = () => {
+                if (pollTimer) window.clearTimeout(pollTimer);
+                if (!['ready_for_checkout', 'verified_ready'].includes(cart.status)) return;
+                pollTimer = window.setTimeout(async () => {
+                    try {
+                        const result = await send(statusUrl, 'GET');
+                        if (result.cart) {
+                            cart = result.cart;
+                            render();
+                        }
+                    } catch (error) {
+                        schedulePoll();
+                    }
+                }, 5000);
+            };
+
+            function renderRating() {
+                const paid = cart.status === 'paid';
+                paidPanel.hidden = !paid;
+                finish.hidden = paid;
+                if (!paid) return;
+                if (cart.rated_at) {
+                    ratingFormWrap.hidden = true;
+                    ratingThanks.hidden = false;
+                    ratingThanks.textContent = `Thank you! You rated our service ${cart.service_rating}/5.`;
+                } else {
+                    ratingFormWrap.hidden = false;
+                    ratingThanks.hidden = true;
+                }
+            }
+
             function render() {
+                const editable = cart.status === 'shopping';
                 body.innerHTML = cart.items.length ? cart.items.map(item => `
                     <tr>
                         <td data-label="Product">
@@ -100,6 +153,8 @@
 
                 finish.disabled = !editable || cart.items.length === 0;
                 if (cart.status === 'ready_for_checkout' || cart.status === 'verified_ready') showQr(cart.token);
+                renderRating();
+                schedulePoll();
             }
 
             async function updateItem(id, qty) {
@@ -113,7 +168,7 @@
             }
 
             document.addEventListener('pos:code-scanned', async event => {
-                if (!editable) return;
+                if (cart.status !== 'shopping') return;
                 try {
                     const result = await send(scanUrl, 'POST', { code: event.detail.code });
                     cart = result.cart;
@@ -145,7 +200,26 @@
                 }
             });
 
-            document.querySelector('.scanner-input').focus();
+            document.getElementById('submit-rating').addEventListener('click', async () => {
+                const selected = document.querySelector('input[name="service_rating"]:checked');
+                if (!selected) {
+                    showMessage('Please select a rating from 1 to 5 stars.', true);
+                    return;
+                }
+                try {
+                    const result = await send(rateUrl, 'POST', {
+                        rating: Number(selected.value),
+                        feedback: document.getElementById('service-feedback').value,
+                    });
+                    cart = result.cart;
+                    render();
+                    showMessage(result.message);
+                } catch (error) {
+                    showMessage(error.message, true);
+                }
+            });
+
+            document.querySelector('.scanner-input')?.focus();
             render();
         });
     </script>
@@ -159,6 +233,11 @@
         .shop-quantity { width:84px; border:1px solid #94a3b8; border-radius:5px; font:inherit; padding:8px; }
         .qr-panel { margin-top:24px; padding:20px; border:2px solid #0f766e; border-radius:8px; text-align:center; }
         #cashier-cart-qr { display:flex; justify-content:center; margin:16px; }
+        .rating-stars { display:flex; flex-wrap:wrap; gap:10px; justify-content:center; margin:12px 0; }
+        .rating-star { background:#f0fdfa; border:1px solid #99f6e4; border-radius:6px; cursor:pointer; padding:8px 12px; }
+        .rating-star input { margin-right:4px; }
+        #service-feedback { border:1px solid #94a3b8; border-radius:6px; font:inherit; margin:8px 0 12px; padding:10px; width:100%; }
+        #rating-thanks { color:#0f766e; font-weight:700; }
         @media(max-width:640px) {
             main { padding:16px; }
             .shop-cart { max-width:480px; }
