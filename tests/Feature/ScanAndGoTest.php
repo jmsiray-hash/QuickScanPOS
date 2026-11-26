@@ -44,6 +44,8 @@ class ScanAndGoTest extends TestCase
         $this->get(route('dashboard'))
             ->assertOk()
             ->assertSee('POS Checkout')
+            ->assertSee('Cashier Dashboard')
+            ->assertSee(route('cashier-dashboard'), false)
             ->assertSee(route('products.create'), false)
             ->assertSee(route('products.index'), false)
             ->assertSee(route('pos.store-qr'), false)

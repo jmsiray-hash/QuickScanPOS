@@ -17,6 +17,8 @@
         .button-secondary { background:#e2e8f0; color:var(--ink); } .form-grid { display:grid; gap:18px; max-width:640px; } .field { display:grid; gap:6px; } .field label { font-weight:700; } .field input { border:1px solid #94a3b8; border-radius:5px; font:inherit; padding:10px 12px; width:100%; }
         .error { color:#b91c1c; margin:0; } .alert { border-radius:6px; margin-bottom:20px; padding:12px 16px; } .alert-success { background:#dcfce7; color:#166534; } .alert-errors { background:#fee2e2; color:#991b1b; }
         .site-header nav { justify-content:flex-end; } .site-header nav form { display:inline; }
+        .site-header nav .cashier-dashboard-link { background:var(--brand); border-radius:6px; color:#fff; font-weight:700; }
+        .site-header nav .cashier-dashboard-link:hover,.site-header nav .cashier-dashboard-link:focus { background:var(--brand-dark); color:#fff; }
         .avatar { border-radius:50%; display:block; height:56px; object-fit:cover; width:56px; } .avatar-preview { height:120px; width:120px; } dt { font-weight:700; margin-top:16px; } dd { margin-left:0; }
         footer { color:var(--muted); font-size:.9rem; padding:20px 0; } @media(max-width:640px) { .site-header { align-items:flex-start; flex-direction:column; gap:12px; } .site-shell { padding:16px; } }
         @media(max-width:900px) { .site-header { align-items:flex-start; flex-direction:column; } .site-header nav { justify-content:flex-start; } }
@@ -31,6 +33,7 @@
             <a href="{{ route('shop.entry') }}">Scan &amp; Go</a>
             @auth
                 <a href="{{ route('dashboard') }}">Dashboard</a>
+                <a class="cashier-dashboard-link" href="{{ route('cashier-dashboard') }}">Cashier Dashboard</a>
                 <a href="{{ route('pos.index') }}">Checkout</a>
                 <a href="{{ route('products.index') }}">Products</a>
                 <a href="{{ route('sales.index') }}">Sales Reports</a>

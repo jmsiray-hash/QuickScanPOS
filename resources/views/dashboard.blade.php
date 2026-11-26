@@ -22,6 +22,12 @@
     @endif
 
     <section class="dashboard-grid" aria-label="Store management">
+        <a class="dashboard-card dashboard-card-primary" href="{{ route('cashier-dashboard') }}">
+            <span class="dashboard-card-label">CASHIER</span>
+            <h2>Cashier Dashboard</h2>
+            <p>Browse available products by category and add items directly to checkout.</p>
+            <span class="dashboard-card-action">Open product dashboard &rarr;</span>
+        </a>
         <a class="dashboard-card dashboard-card-primary" href="{{ route('pos.index') }}">
             <span class="dashboard-card-label">SELL</span>
             <h2>POS Checkout</h2>

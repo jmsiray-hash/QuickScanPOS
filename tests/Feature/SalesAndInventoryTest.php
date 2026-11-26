@@ -110,6 +110,63 @@ class SalesAndInventoryTest extends TestCase
         ])->assertUnprocessable();
     }
 
+    public function test_cashier_dashboard_browses_available_products_by_category_and_adds_to_checkout(): void
+    {
+        $fruit = Product::create([
+        'barcode' => 'DASHBOARD-APPLE',
+        'name' => 'Green Apple',
+        'category' => 'Fruits',
+        'cost_price' => 1,
+        'selling_price' => 3.25,
+        'stock_quantity' => 5,
+        'is_active' => true,
+        ]);
+        Product::create([
+        'barcode' => 'DASHBOARD-BREAD',
+        'name' => 'Fresh Bread',
+        'category' => 'Bakery',
+        'cost_price' => 1,
+        'selling_price' => 4,
+        'stock_quantity' => 3,
+        'is_active' => true,
+        ]);
+        Product::create([
+        'barcode' => 'DASHBOARD-EMPTY',
+        'name' => 'Out of Stock Fruit',
+        'category' => 'Fruits',
+        'cost_price' => 1,
+        'selling_price' => 2,
+        'stock_quantity' => 0,
+        'is_active' => true,
+        ]);
+
+        $this->get(route('cashier-dashboard'))
+        ->assertOk()
+        ->assertSee('Product Catalog')
+        ->assertSee('Categories')
+        ->assertSee('Fruits')
+        ->assertSee('Bakery')
+        ->assertSee('Green Apple')
+        ->assertSee('Fresh Bread')
+        ->assertDontSee('Out of Stock Fruit')
+        ->assertSee(route('pos.store-qr'), false);
+
+        $this->get(route('cashier-dashboard', ['category' => 'Fruits']))
+        ->assertOk()
+        ->assertSee('Green Apple')
+        ->assertDontSee('Fresh Bread');
+
+        $this->withSession(['pos_cart' => [
+        (string) $fruit->id => [
+            'product_id' => $fruit->id,
+            'quantity' => 1,
+            'unit_price' => 3.25,
+        ],
+        ]])->get(route('cashier-dashboard'))
+        ->assertOk()
+        ->assertSee('const cartQuantities = {"'.$fruit->id.'":1}', false);
+    }
+
     public function test_checkout_requires_an_open_shift(): void
     {
         $product = $this->product('SHIFT-REQ-1', 'Shift required item', 5);

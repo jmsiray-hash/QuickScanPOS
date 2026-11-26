@@ -27,6 +27,7 @@ The product camera scanner, customer camera scanner, cashier phone scanner, QR c
 ## Inventory, Completed Sales, and Receipts
 
 - **Products** is the inventory list. Use the search field to find a product by name, category, or barcode; filter to low stock (1–5 units) or out of stock. The summary counts active products and their on-hand units. Select **Edit / Restock** to update quantities or product details, or **Remove** to delete a product after confirmation. Removal clears it from open carts and inventory, deletes its photo, and preserves completed sale item snapshots.
+- **Cashier Dashboard** in the staff navigation shows available products as searchable, category-filtered cards. Enter a quantity and add an item to the POS cart; use **View cart / checkout** to review it in POS Checkout. The catalog dashboard omits inactive and out-of-stock products.
 - Successful checkout deducts stock and saves a sale with a snapshot of each sold product's name, barcode, quantity, and price.
 - Open **Sales Reports** to select a date range and review revenue, transaction count, units sold, top-selling items, and each completed transaction. Reports default to today.
 - Select **View receipt** in the transaction list, or the receipt link shown after checkout, to view and print a receipt. Sold-item snapshots remain available if a product is renamed or later removed.
