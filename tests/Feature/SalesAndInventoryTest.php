@@ -142,8 +142,14 @@ class SalesAndInventoryTest extends TestCase
 
         $this->get(route('cashier-dashboard'))
         ->assertOk()
-        ->assertSee('Product Catalog')
-        ->assertSee('Categories')
+        ->assertSee('Cashier workspace')
+        ->assertSee('Current sale')
+        ->assertSee('Apply discount')
+        ->assertSee('Complete payment')
+        ->assertSee('GCash')
+        ->assertSee('Maya')
+        ->assertSee('Back to dashboard')
+        ->assertDontSee('<nav aria-label="Primary navigation"', false)
         ->assertSee('Fruits')
         ->assertSee('Bakery')
         ->assertSee('Green Apple')
@@ -164,7 +170,35 @@ class SalesAndInventoryTest extends TestCase
         ],
         ]])->get(route('cashier-dashboard'))
         ->assertOk()
-        ->assertSee('const cartQuantities = {"'.$fruit->id.'":1}', false);
+        ->assertSee('complete-sale-button');
+
+        $this->getJson(route('pos.cart.contents'))
+        ->assertOk()
+        ->assertJsonPath('cart.items.0.product_id', $fruit->id)
+        ->assertJsonPath('cart.items.0.quantity', 1);
+    }
+
+    public function test_cashier_dashboard_opens_shift_without_leaving_standalone_pos_screen(): void
+    {
+        $this->get(route('cashier-dashboard'))
+        ->assertOk()
+        ->assertSee('Open your cashier shift')
+        ->assertSee('Opening fund (₱)');
+
+        $this->post(route('pos.shift.open'), [
+        'cashier_dashboard' => 1,
+        'opening_cash' => 250,
+        ])->assertRedirect(route('cashier-dashboard'));
+
+        $this->assertDatabaseHas('cashier_shifts', [
+        'user_id' => auth()->id(),
+        'opening_cash' => 250,
+        'status' => 'open',
+        ]);
+        $this->get(route('cashier-dashboard'))
+        ->assertOk()
+        ->assertSee('SHIFT OPEN')
+        ->assertSee('Shift started');
     }
 
     public function test_checkout_requires_an_open_shift(): void

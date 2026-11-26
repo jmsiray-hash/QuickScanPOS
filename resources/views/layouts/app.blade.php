@@ -24,11 +24,16 @@
         @media(max-width:900px) { .site-header { align-items:flex-start; flex-direction:column; } .site-header nav { justify-content:flex-start; } }
     </style>
 </head>
-<body>
-<div class="site-shell">
-    <header class="site-header">
-        <a class="brand" href="{{ route('home') }}">QuickScanPos</a>
-        <nav aria-label="Primary navigation">
+<body class="{{ request()->routeIs('cashier-dashboard') ? 'cashier-app-body' : '' }}">
+<div class="site-shell {{ request()->routeIs('cashier-dashboard') ? 'cashier-app-shell' : '' }}">
+    @if (request()->routeIs('cashier-dashboard'))
+        <header class="cashier-app-header">
+            <a class="cashier-back-button" href="{{ route('dashboard') }}"><span aria-hidden="true">←</span> Back to dashboard</a>
+        </header>
+    @else
+        <header class="site-header">
+            <a class="brand" href="{{ route('home') }}">QuickScanPos</a>
+            <nav aria-label="Primary navigation">
             <a href="{{ route('home') }}">Home</a>
             <a href="{{ route('shop.entry') }}">Scan &amp; Go</a>
             @auth
@@ -48,9 +53,10 @@
                 <a href="{{ route('login') }}">Cashier Sign In</a>
                 <a class="button" href="{{ route('register') }}">Create Account</a>
             @endauth
-        </nav>
-    </header>
-    <main>
+            </nav>
+        </header>
+    @endif
+    <main class="{{ request()->routeIs('cashier-dashboard') ? 'cashier-app-main' : '' }}">
         @if (session('status')) <div class="alert alert-success" role="status">{{ session('status') }}</div> @endif
         @if ($errors->any()) <div class="alert alert-errors" role="alert"><p>Please correct the following errors:</p><ul>@foreach ($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul></div> @endif
         @isset($slot)
@@ -59,7 +65,9 @@
             @yield('content')
         @endisset
     </main>
-    <footer><p>&copy; {{ date('Y') }} QuickScanPos · Scan, sell, manage.</p></footer>
+    @unless (request()->routeIs('cashier-dashboard'))
+        <footer><p>&copy; {{ date('Y') }} QuickScanPos · Scan, sell, manage.</p></footer>
+    @endunless
 </div>
 </body>
 </html>

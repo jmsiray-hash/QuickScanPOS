@@ -64,6 +64,7 @@ Route::middleware('auth')->group(function(){
  Route::post('/pos/verification',[PosController::class,'generateVerification'])->name('pos.verification.create');
  Route::get('/pos/verify-status/{code}',[PosVerificationController::class,'status'])->name('pos.verify-status');
  Route::get('/pos',[PosController::class,'index'])->name('pos.index');
+ Route::get('/pos/cart',[PosController::class,'cartContents'])->name('pos.cart.contents');
  Route::post('/pos/scan-item',[PosController::class,'scanItem'])->name('pos.scan');
  Route::post('/pos/cart/update',[PosController::class,'updateCart'])->name('pos.cart.update');
  Route::post('/pos/customer',[PosController::class,'selectCustomer'])->name('pos.customer.select');

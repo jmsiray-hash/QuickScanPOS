@@ -29,6 +29,11 @@ class PosController extends Controller
         ]);
     }
 
+    public function cartContents(): JsonResponse
+    {
+        return response()->json(['cart' => $this->cart()]);
+    }
+
     public function storeQr(): View
     {
         return view('pos.store-qr', [

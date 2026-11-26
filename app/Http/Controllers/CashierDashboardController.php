@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Product;
+use App\Models\CashierShift;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
@@ -45,6 +46,18 @@ class CashierDashboardController extends Controller
             ->mapWithKeys(static fn (array $item, string $productId): array => [$productId => (int) $item['quantity']])
             ->all();
 
-        return view('cashier-dashboard.index', compact('products', 'categories', 'search', 'category', 'cartQuantities'));
+        $activeShift = CashierShift::query()
+            ->where('user_id', $request->user()->id)
+            ->where('status', 'open')
+            ->first();
+
+        return view('cashier-dashboard.index', compact(
+            'products',
+            'categories',
+            'search',
+            'category',
+            'cartQuantities',
+            'activeShift',
+        ));
     }
 }
