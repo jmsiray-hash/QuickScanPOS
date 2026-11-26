@@ -38,6 +38,10 @@
         <p id="pos-scan-mode" class="field-hint">Point the camera at a code.</p>
         <button class="button button-secondary" id="stop-pos-scanner" type="button">Close Camera</button>
     </div>
+    <div id="customer-scan-success" class="customer-scan-success" role="status" aria-live="polite" hidden>
+        <span class="customer-scan-check" aria-hidden="true">✓</span>
+        <span><strong>SCANNED</strong><small>Proceed to payment when ready.</small></span>
+    </div>
     <p id="pos-cart-source" class="field-hint"></p>
     <div class="table-wrap">
         <table>
@@ -70,6 +74,7 @@
             const customerLookupUrl = @json(route('customers.lookup'));
             const customerSelectUrl = @json(route('pos.customer.select'));
             let scanner = null;
+            let scanInProgress = false;
             let lastCode = '';
             let lastScannedAt = 0;
             let isVerified = false;
@@ -245,14 +250,21 @@
                 const code = cartToken || verificationCode || String(rawCode || '').trim().toUpperCase();
                 barcodeInput.value = '';
                 const now = Date.now();
-                if (!code || (code === lastCode && now - lastScannedAt < 1200)) return;
+                if (!code || scanInProgress || (code === lastCode && now - lastScannedAt < 1200)) return;
                 lastCode = code;
                 lastScannedAt = now;
+                scanInProgress = true;
                 try {
                     if (cartToken || verificationCode) {
                         const result = cartToken
                             ? await request(importUrl.replace('CART_TOKEN', encodeURIComponent(cartToken)))
                             : await request('{{ route('pos.scan') }}', 'POST', { code: verificationCode });
+                        const cameraStopped = await stopCamera();
+                        const scanSuccess = document.getElementById('customer-scan-success');
+                        scanSuccess.hidden = false;
+                        scanSuccess.classList.remove('customer-scan-success-animate');
+                        void scanSuccess.offsetWidth;
+                        scanSuccess.classList.add('customer-scan-success-animate');
                         currentCartToken = result.customer_cart_token;
                         currentCustomerName = result.customer_name || null;
                         isVerified = result.is_verified === true;
@@ -272,8 +284,11 @@
                             isVerified = false;
                             document.getElementById('verification-panel').hidden = true;
                         }
-                        show(result.message);
+                        show(cameraStopped
+                            ? 'Customer QR scanned. Proceed to payment when ready.'
+                            : 'Customer QR scanned. Proceed to payment; close the camera manually.');
                     } else {
+                        document.getElementById('customer-scan-success').hidden = true;
                         const result = await request('{{ route('pos.scan') }}', 'POST', { code });
                         if (currentCartToken) {
                             isVerified = false;
@@ -287,7 +302,28 @@
                     show(error.message, true);
                     beep(true);
                 } finally {
+                    scanInProgress = false;
                     focusScanner();
+                }
+            }
+            async function stopCamera() {
+                if (!scanner) {
+                    document.getElementById('pos-scanner').hidden = true;
+                    document.getElementById('pos-scan-mode').textContent = '';
+                    return true;
+                }
+
+                const activeScanner = scanner;
+                try {
+                    await activeScanner.stop();
+                    activeScanner.clear();
+                    scanner = null;
+                    document.getElementById('pos-scanner').hidden = true;
+                    document.getElementById('pos-scan-mode').textContent = '';
+                    return true;
+                } catch (error) {
+                    show(error.message || 'Could not stop the camera.', true);
+                    return false;
                 }
             }
             function updateFromRow(input) {
@@ -463,16 +499,7 @@
                 'Point the camera at a product barcode or QR code.',
             ));
             document.getElementById('stop-pos-scanner').addEventListener('click', async () => {
-                if (!scanner) return;
-                try {
-                    await scanner.stop();
-                    scanner.clear();
-                    scanner = null;
-                    document.getElementById('pos-scanner').hidden = true;
-                    document.getElementById('pos-scan-mode').textContent = '';
-                } catch (error) {
-                    show(error.message || 'Could not stop the camera.', true);
-                }
+                await stopCamera();
             });
             document.getElementById('generate-verification').addEventListener('click', async () => {
                 try {
@@ -498,6 +525,7 @@
                     pollTimer = null;
                     polledStatusUrl = null;
                     document.getElementById('verification-panel').hidden = true;
+                    document.getElementById('customer-scan-success').hidden = true;
                     render(result.cart);
                     show(result.message + ' Sale #' + result.sale_id);
                     const receiptLink = document.createElement('a');
@@ -529,6 +557,15 @@
         .pos-scanner-controls { flex-wrap:wrap; width:100%; }
         .pos-scanner-controls input { flex:1; min-width:230px; border:1px solid #94a3b8; border-radius:5px; font:inherit; padding:10px; }
         .cashier-flow-hint { background:#f0fdfa; border-left:4px solid #0f766e; margin:16px 0; padding:12px 16px; }
+        .customer-scan-success { align-items:center; background:#dcfce7; border:1px solid #86efac; border-radius:10px; color:#166534; display:flex; gap:14px; margin:16px 0; padding:16px 20px; }
+        .customer-scan-success[hidden] { display:none; }
+        .customer-scan-check { align-items:center; background:#16a34a; border-radius:50%; color:#fff; display:flex; flex:none; font-size:1.6rem; font-weight:800; height:44px; justify-content:center; width:44px; }
+        .customer-scan-success strong,.customer-scan-success small { display:block; }
+        .customer-scan-success strong { font-size:1.1rem; letter-spacing:.04em; }
+        .customer-scan-success-animate { animation:customer-scan-confirm .65s ease-out; }
+        .customer-scan-success-animate .customer-scan-check { animation:customer-scan-check .5s ease-out; }
+        @keyframes customer-scan-confirm { from { opacity:.4; transform:translateY(8px) scale(.98); } to { opacity:1; transform:translateY(0) scale(1); } }
+        @keyframes customer-scan-check { 0% { transform:scale(.5) rotate(-25deg); } 75% { transform:scale(1.18) rotate(8deg); } 100% { transform:scale(1) rotate(0); } }
         .pos-quantity { width:72px; border:1px solid #94a3b8; border-radius:5px; font:inherit; padding:6px; }
         .pos-discount-fields { min-width:150px; }
         .pos-discount-fields select,.pos-discount-fields input { display:block; margin:3px 0; max-width:150px; }
