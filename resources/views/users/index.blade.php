@@ -16,6 +16,7 @@
                     <th>Username</th>
                     <th>Full Name</th>
                     <th>Email</th>
+                    <th>Role</th>
                     <th>Created At</th>
                     <th>Actions</th>
                 </tr>
@@ -37,6 +38,7 @@
                         <td>{{ $user->username }}</td>
                         <td>{{ $user->full_name }}</td>
                         <td>{{ $user->email }}</td>
+                        <td>{{ ucfirst($user->role) }}</td>
                         <td>{{ $user->created_at }}</td>
                         <td>
                             <div class="row-actions">
@@ -52,7 +54,7 @@
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="7">No users found.</td>
+                        <td colspan="8">No users found.</td>
                     </tr>
                 @endforelse
             </tbody>

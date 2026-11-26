@@ -69,14 +69,16 @@ Shopping carts expire after two hours. Account-linked carts require that custome
 
 ## Cashier Import, Verification, and Payment
 
-1. At `/pos`, scan the customer's final QR with the cashier screen camera or enter its `CART-...` code. The POS loads that cart without adding a sale. You can proceed to checkout immediately, which is useful when checkout lines are long.
+1. At `/pos`, open a shift and record the opening cash fund before completing a transaction. The cashier QR camera can then scan the customer's final QR or enter its `CART-...` code. The POS loads that cart without adding a sale.
 2. Search by customer name, email, or phone to select a customer for a direct POS sale. The POS shows the customer's recorded PWD/Senior ID, store-discount reminder, monthly store-discount quota used, and remaining amount. Scan & Go customers are linked automatically.
-3. Before payment, the cashier may edit quantities, remove items, or scan additional products in the POS cart. Any item/quantity change resets item checks.
-4. Choose a discount type and enter its percentage on each eligible item; discounts are never applied automatically. Store/loyalty discounts are capped by the customer's remaining monthly quota (default ₱0 until staff configures it). PWD/Senior discounts require a matching ID on the customer record and are tracked separately from the store quota.
-5. Optional queue/item check: scan the displayed verification QR with the cashier's phone, or use **Connect Cashier Phone** to create one. It opens the online item-check screen so a cashier can verify the physical items in a long queue before payment.
-6. On the phone, scan each physical item's barcode, use OCR for a printed number, enter a code manually, or tap **Check one**. Unknown, unexpected, and over-quantity scans show a mismatch warning. The phone refreshes its expected items when the cashier edits the cart.
-7. If you use the phone check, once every expected piece is checked the mobile page and cashier POS show **SCANNED AND CHECKED ITEM - READY FOR PAYMENT**. The cashier POS polls for this state, but checkout remains available even when the check is not used.
-8. Tap **Complete Checkout**. Successful payment records the customer and per-item discount snapshots, deducts stock, and marks the customer cart `paid` in the same database transaction. Customer records show their completed purchase history.
+3. Before payment, edit quantities, scan products, or enter a lower promo price for an item. A promo price is saved as a `PROMO` line and shown separately on the receipt. Any item/quantity change resets optional item checks.
+4. For a Senior/PWD discount, select the type, enter the ID number, and apply it only to catalog items marked Senior/PWD eligible. Eligible lines receive the configured 20% discount and VAT exemption; promo-priced items do not stack another discount. Set eligible products in **Products → Edit / Restock** only after confirming the applicable BIR rules for the product.
+5. Choose **Cash**, **GCash**, **Maya**, or **Card**. Cash requires the amount received and shows change; GCash/Maya require the transaction reference. A successful sale stores payment, tax, cashier, item, discount, and receipt details and deducts stock.
+6. Optional queue/item check: scan the displayed verification QR with the cashier's phone, or use **Connect Cashier Phone**. It opens the online item-check screen. This physical-item check is optional and is separate from the POS cashier's customer-cart QR camera.
+7. Completed receipts remain available in **Sales Reports**. An Admin or Manager can void a completed transaction by entering a reason; the sale is marked voided and its remaining product stock is restored. Voided cash sales are included as cash refunds in shift reconciliation.
+8. At closing, open **Sales Reports**, count the drawer, and save the Z-reading. Expected cash is opening fund + cash sales − cash refunds/voids. Review the saved cash, GCash, Maya, card, counted cash, and over/short figures.
+
+The POS treats listed prices as VAT-inclusive when `POS_VAT_RATE` is greater than zero; the default is 0% to preserve existing behavior. Configure the rate only after confirming the store's tax setup. Existing users default to Cashier; the account `gsiray49@gmail.com` is promoted to Admin by the SOP migration, and Admins can assign Cashier, Manager, or Admin roles in **Users**.
 
 ## Online Phone Scanning
 

@@ -4,6 +4,21 @@
 
 @section('content')
     <h2>POS Checkout</h2>
+    @if (!$activeShift)
+        <section class="shift-opening-panel">
+            <h3>Open Shift</h3>
+            <p>Record the opening cash fund before completing transactions.</p>
+            <form method="POST" action="{{ route('pos.shift.open') }}" class="row-actions">
+                @csrf
+                <label for="opening-cash">Opening cash fund (₱)</label>
+                <input id="opening-cash" name="opening_cash" type="number" step="0.01" min="0" required>
+                <button class="button" type="submit">Open Shift</button>
+                @error('opening_cash')<span class="error">{{ $message }}</span>@enderror
+            </form>
+        </section>
+    @else
+        <p class="active-shift-note">Shift open since {{ $activeShift->opened_at->format('M j, g:i A') }} · Opening fund ₱{{ number_format($activeShift->opening_cash, 2) }}</p>
+    @endif
     <div id="pos-toast" class="alert" role="status" hidden></div>
     <div class="page-actions pos-actions">
         <div class="row-actions pos-scanner-controls">
@@ -50,6 +65,44 @@
         </table>
     </div>
     <div id="cart-summary"></div>
+    <section class="payment-panel">
+        <h3>Payment &amp; Discounts</h3>
+        <div class="payment-fields">
+            <div class="field">
+                <label for="payment-method">Payment method</label>
+                <select id="payment-method">
+                    <option value="cash">Cash</option>
+                    <option value="gcash">GCash</option>
+                    <option value="maya">Maya</option>
+                    <option value="card">Card</option>
+                </select>
+            </div>
+            <div class="field" id="cash-received-field">
+                <label for="cash-received">Cash received (₱)</label>
+                <input id="cash-received" type="number" min="0" step="0.01" inputmode="decimal">
+                <small id="change-preview">Change: ₱0.00</small>
+            </div>
+            <div class="field" id="payment-reference-field" hidden>
+                <label for="payment-reference">Reference number</label>
+                <input id="payment-reference" maxlength="100" autocomplete="off">
+            </div>
+        </div>
+        <div class="payment-fields special-discount-fields">
+            <div class="field">
+                <label for="special-discount-type">Senior/PWD discount</label>
+                <select id="special-discount-type">
+                    <option value="">None</option>
+                    <option value="senior">Senior Citizen (20%)</option>
+                    <option value="pwd">PWD (20%)</option>
+                </select>
+            </div>
+            <div class="field" id="special-discount-id-field" hidden>
+                <label for="special-discount-id">Senior/PWD ID number</label>
+                <input id="special-discount-id" maxlength="100" autocomplete="off">
+            </div>
+        </div>
+        <p class="field-hint">The 20% statutory discount and VAT exemption apply only to products marked eligible in the catalog. Prices are treated as VAT-inclusive when POS_VAT_RATE is above zero; current rate: {{ number_format($vatRate, 2) }}%.</p>
+    </section>
     <section id="verification-panel" class="verification-panel" hidden>
         <h3>Cashier Phone Item Check</h3>
         <p>Optional item check: open the cashier phone camera and scan this QR to compare the physical items with the customer's cart.</p>
@@ -58,7 +111,18 @@
         <p id="verification-link"></p>
         <div id="verification-badge" class="verified-banner" hidden>SCANNED AND CHECKED ITEM - READY FOR PAYMENT</div>
     </section>
-    <button class="button" id="checkout" type="button">Complete Checkout</button>
+    <button class="button" id="checkout" type="button" @disabled(!$activeShift)>Complete Sale</button>
+    <dialog id="sale-receipt-modal" class="sale-receipt-modal" aria-labelledby="sale-receipt-title">
+        <div class="receipt-modal-actions">
+            <h2 id="sale-receipt-title">QuickScanPos Receipt</h2>
+            <button class="button button-secondary" id="close-sale-receipt" type="button">Close</button>
+        </div>
+        <div id="sale-receipt-content"></div>
+        <div class="receipt-modal-actions">
+            <a id="full-receipt-link" class="button button-secondary" href="#">View full receipt</a>
+            <button class="button" id="print-sale-receipt" type="button">Print Receipt</button>
+        </div>
+    </dialog>
 
     <script src="https://unpkg.com/html5-qrcode"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
@@ -73,6 +137,10 @@
             const verificationCreateUrl = @json(route('pos.verification.create'));
             const customerLookupUrl = @json(route('customers.lookup'));
             const customerSelectUrl = @json(route('pos.customer.select'));
+            const hasOpenShift = @json($activeShift !== null);
+            const vatRate = @json($vatRate);
+            let currentCart = null;
+            let isSubmittingSale = false;
             let scanner = null;
             let scanInProgress = false;
             let lastCode = '';
@@ -92,11 +160,12 @@
             function updatePaymentState() {
                 const button = document.getElementById('checkout');
                 button.textContent = isVerified
-                    ? 'Complete Checkout - Phone Check Complete'
-                    : 'Complete Checkout';
-                button.disabled = false;
+                    ? 'Complete Sale - Phone Check Complete'
+                    : 'Complete Sale';
+                button.disabled = !hasOpenShift || !currentCart?.items?.length || isSubmittingSale;
                 button.classList.toggle('payment-ready', isVerified);
                 button.classList.remove('payment-warning');
+                updatePaymentPreview();
             }
             function show(message, isError = false) {
                 toast.textContent = message;
@@ -150,28 +219,30 @@
                 return result;
             }
             function render(cart) {
+                currentCart = cart;
                 const body = document.getElementById('cart-body');
                 body.innerHTML = cart.items.length ? cart.items.map(item => `
                     <tr>
-                        <td>${escapeHtml(item.name)}<br><small>${escapeHtml(item.barcode)}</small></td>
+                        <td>${escapeHtml(item.name)} ${item.is_promo ? '<span class="promo-tag">PROMO</span>' : ''}<br><small>${escapeHtml(item.barcode)}</small></td>
                         <td><input class="pos-quantity" data-id="${item.product_id}" type="number" min="0" max="${item.available_stock}" value="${item.quantity}" aria-label="Quantity for ${escapeHtml(item.name)}"></td>
                         <td>${money(item.unit_price)}</td>
                         <td class="pos-discount-fields">
                             <select class="pos-discount-type" data-id="${item.product_id}" aria-label="Discount type for ${escapeHtml(item.name)}" ${cart.customer_id ? '' : 'disabled'}>
                                 <option value="" ${!item.discount_type ? 'selected' : ''}>None</option>
                                 <option value="store" ${item.discount_type === 'store' ? 'selected' : ''}>Store / loyalty</option>
-                                <option value="pwd" ${item.discount_type === 'pwd' ? 'selected' : ''} ${discountIdType === 'pwd' ? '' : 'disabled'}>PWD ID</option>
-                                <option value="senior" ${item.discount_type === 'senior' ? 'selected' : ''} ${discountIdType === 'senior' ? '' : 'disabled'}>Senior ID</option>
                             </select>
                             <label class="sr-only" for="discount-rate-${item.product_id}">Discount percent</label>
                             <input id="discount-rate-${item.product_id}" class="pos-discount-percent" data-id="${item.product_id}" type="number" min="0" max="100" step="0.01" value="${Number(item.discount_percent || 0)}" ${cart.customer_id && item.discount_type ? '' : 'disabled'} aria-label="Discount percent for ${escapeHtml(item.name)}">
-                            ${Number(item.discount_amount || 0) ? `<small>-${money(item.discount_amount)}</small>` : ''}
+                            <label class="promo-label" for="promo-price-${item.product_id}">Promo price</label>
+                            <input id="promo-price-${item.product_id}" class="pos-promo-price" data-id="${item.product_id}" type="number" min="0" step="0.01" value="${item.promo_price ?? ''}" placeholder="Regular: ${money(item.unit_price)}" aria-label="Promo price for ${escapeHtml(item.name)}">
+                            ${item.senior_pwd_eligible ? '<small class="eligibility-note">Senior/PWD eligible</small>' : ''}
+                            ${Number(item.discount_amount || 0) ? `<small>Discount: -${money(item.discount_amount)}</small>` : ''}
                         </td>
                         <td>${money(item.line_total ?? item.quantity * item.unit_price)}</td>
                         <td><button class="button button-secondary pos-remove" data-id="${item.product_id}" type="button">Remove</button></td>
                     </tr>
                 `).join('') : '<tr><td colspan="6">Cart is empty. Scan a product or import a CART- code.</td></tr>';
-                document.getElementById('cart-summary').innerHTML = `<p><strong>Subtotal:</strong> ${money(cart.subtotal)} &nbsp; <strong>Discount:</strong> ${money(cart.discount)} &nbsp; <strong>Total:</strong> ${money(cart.total)}</p>`;
+                document.getElementById('cart-summary').innerHTML = `<p><strong>Subtotal:</strong> ${money(cart.subtotal)} &nbsp; <strong>Discount:</strong> ${money(cart.discount)} &nbsp; <strong>VAT / Tax:</strong> ${money(cart.tax)} &nbsp; <strong>Total:</strong> ${money(cart.total)}</p>`;
                 currentCartToken = cart.customer_cart_token || currentCartToken;
                 currentCustomerName = cart.customer_name || currentCustomerName;
                 selectedCustomerId = cart.customer_id || null;
@@ -198,6 +269,9 @@
                     input.addEventListener('change', () => updateFromRow(input));
                 });
                 document.querySelectorAll('.pos-discount-type, .pos-discount-percent').forEach(input => {
+                    input.addEventListener('change', () => updateFromRow(input));
+                });
+                document.querySelectorAll('.pos-promo-price').forEach(input => {
                     input.addEventListener('change', () => updateFromRow(input));
                 });
                 document.querySelectorAll('.pos-remove').forEach(button => {
@@ -333,15 +407,17 @@
                     Number(row.querySelector('.pos-quantity').value),
                     row.querySelector('.pos-discount-type').value || null,
                     Number(row.querySelector('.pos-discount-percent').value || 0),
+                    row.querySelector('.pos-promo-price').value === '' ? null : Number(row.querySelector('.pos-promo-price').value),
                 );
             }
-            async function update(productId, quantity, discountType = null, discountPercent = 0) {
+            async function update(productId, quantity, discountType = null, discountPercent = 0, promoPrice = null) {
                 try {
                     const result = await request('{{ route('pos.cart.update') }}', 'POST', {
                         product_id: Number(productId),
                         quantity: Number(quantity),
                         discount_type: discountType,
                         discount_percent: Number(discountPercent),
+                        promo_price: promoPrice,
                     });
                     if (currentCartToken) {
                         isVerified = false;
@@ -357,6 +433,70 @@
                     }
                     focusScanner();
                 }
+            }
+            function checkoutTotal() {
+                if (!currentCart) return 0;
+                let total = Number(currentCart.total || 0);
+                const specialType = document.getElementById('special-discount-type').value;
+                if (specialType) {
+                    const divider = 1 + Number(vatRate || 0) / 100;
+                    for (const item of currentCart.items) {
+                        if (!item.senior_pwd_eligible || item.is_promo) continue;
+                        const base = Number(item.unit_price) * Number(item.quantity) / divider;
+                        const specialTotal = Math.round(base * (1 - 0.20) * 100) / 100;
+                        total -= Number(item.line_total) - specialTotal;
+                    }
+                }
+                return Math.max(0, Math.round(total * 100) / 100);
+            }
+            function updatePaymentPreview() {
+                const method = document.getElementById('payment-method').value;
+                const cashField = document.getElementById('cash-received-field');
+                const referenceField = document.getElementById('payment-reference-field');
+                const specialType = document.getElementById('special-discount-type').value;
+                const idField = document.getElementById('special-discount-id-field');
+                cashField.hidden = method !== 'cash';
+                referenceField.hidden = !['gcash', 'maya'].includes(method);
+                idField.hidden = !specialType;
+                const cashReceived = Number(document.getElementById('cash-received').value || 0);
+                const total = checkoutTotal();
+                document.getElementById('change-preview').textContent =
+                    'Change: ₱' + Math.max(0, cashReceived - total).toFixed(2) + ' · Total due: ₱' + total.toFixed(2);
+                document.getElementById('payment-reference').required = ['gcash', 'maya'].includes(method);
+                document.getElementById('special-discount-id').required = Boolean(specialType);
+                const paymentReady = method !== 'cash'
+                    ? (!['gcash', 'maya'].includes(method) || document.getElementById('payment-reference').value.trim() !== '')
+                    : cashReceived >= total && total > 0;
+                const specialIdReady = !specialType || document.getElementById('special-discount-id').value.trim() !== '';
+                document.getElementById('checkout').disabled = !hasOpenShift || !currentCart?.items?.length || !paymentReady || !specialIdReady || isSubmittingSale;
+            }
+            function renderSaleReceipt(receipt, receiptUrl) {
+                const escape = value => escapeHtml(value ?? '');
+                const items = receipt.items.map(item => `
+                    <tr>
+                        <td>${escape(item.name)}${item.is_promo ? ' <strong class="promo-tag">PROMO</strong>' : ''}</td>
+                        <td>${item.quantity}</td>
+                        <td>${money(item.promo_unit_price ?? item.unit_price)}</td>
+                        <td>${money(item.discount_amount)}</td>
+                        <td>${money(item.line_total)}</td>
+                    </tr>
+                `).join('');
+                document.getElementById('sale-receipt-content').innerHTML = `
+                    <div class="receipt-store"><strong>${escape(receipt.store)}</strong><div>Sales Receipt #${receipt.id}</div></div>
+                    <p>${escape(receipt.created_at)}<br>Cashier: ${escape(receipt.cashier)}${receipt.customer_name ? '<br>Customer: ' + escape(receipt.customer_name) : ''}</p>
+                    <table class="receipt-modal-table"><thead><tr><th>Item</th><th>Qty</th><th>Price</th><th>Discount</th><th>Total</th></tr></thead><tbody>${items}</tbody></table>
+                    <dl class="receipt-modal-totals">
+                        <div><dt>Subtotal</dt><dd>${money(receipt.subtotal)}</dd></div>
+                        <div><dt>Discount</dt><dd>-${money(receipt.discount)}</dd></div>
+                        <div><dt>VAT / Tax</dt><dd>${money(receipt.tax)}</dd></div>
+                        <div class="receipt-grand-total"><dt>Total</dt><dd>${money(receipt.total)}</dd></div>
+                        <div><dt>Payment</dt><dd>${escape(String(receipt.payment_method).toUpperCase())}</dd></div>
+                        ${receipt.payment_reference ? `<div><dt>Reference</dt><dd>${escape(receipt.payment_reference)}</dd></div>` : ''}
+                        ${receipt.special_discount_type ? `<div><dt>${escape(String(receipt.special_discount_type).toUpperCase())} ID</dt><dd>${escape(receipt.special_discount_id_number)}</dd></div>` : ''}
+                        ${receipt.cash_received !== null ? `<div><dt>Cash received</dt><dd>${money(receipt.cash_received)}</dd></div><div><dt>Change</dt><dd>${money(receipt.change_due)}</dd></div>` : ''}
+                    </dl>`;
+                document.getElementById('full-receipt-link').href = receiptUrl;
+                document.getElementById('sale-receipt-modal').showModal();
             }
             function setupVerification(code, url, statusUrl, verified = false) {
                 isVerified = verified;
@@ -515,9 +655,28 @@
                     focusScanner();
                 }
             });
+            document.getElementById('payment-method').addEventListener('change', updatePaymentPreview);
+            document.getElementById('cash-received').addEventListener('input', updatePaymentPreview);
+            document.getElementById('payment-reference').addEventListener('input', updatePaymentPreview);
+            document.getElementById('special-discount-type').addEventListener('change', updatePaymentPreview);
+            document.getElementById('special-discount-id').addEventListener('input', updatePaymentPreview);
+            document.getElementById('close-sale-receipt').addEventListener('click', () => {
+                document.getElementById('sale-receipt-modal').close();
+                focusScanner();
+            });
+            document.getElementById('print-sale-receipt').addEventListener('click', () => window.print());
             document.getElementById('checkout').addEventListener('click', async () => {
+                if (isSubmittingSale) return;
+                isSubmittingSale = true;
+                updatePaymentPreview();
                 try {
-                    const result = await request('{{ route('pos.checkout') }}', 'POST');
+                    const result = await request('{{ route('pos.checkout') }}', 'POST', {
+                        payment_method: document.getElementById('payment-method').value,
+                        cash_received: document.getElementById('cash-received').value || null,
+                        payment_reference: document.getElementById('payment-reference').value.trim() || null,
+                        special_discount_type: document.getElementById('special-discount-type').value || null,
+                        special_discount_id_number: document.getElementById('special-discount-id').value.trim() || null,
+                    });
                     currentCartToken = null;
                     currentCustomerName = null;
                     isVerified = false;
@@ -533,11 +692,18 @@
                     receiptLink.textContent = ' View / Print Receipt';
                     receiptLink.style.marginLeft = '8px';
                     toast.append(receiptLink);
+                    renderSaleReceipt(result.receipt, result.receipt_url);
+                    document.getElementById('cash-received').value = '';
+                    document.getElementById('payment-reference').value = '';
+                    document.getElementById('special-discount-type').value = '';
+                    document.getElementById('special-discount-id').value = '';
                     beep();
                 } catch (error) {
                     show(error.message, true);
                     beep(true);
                 } finally {
+                    isSubmittingSale = false;
+                    updatePaymentPreview();
                     focusScanner();
                 }
             });
@@ -557,6 +723,27 @@
         .pos-scanner-controls { flex-wrap:wrap; width:100%; }
         .pos-scanner-controls input { flex:1; min-width:230px; border:1px solid #94a3b8; border-radius:5px; font:inherit; padding:10px; }
         .cashier-flow-hint { background:#f0fdfa; border-left:4px solid #0f766e; margin:16px 0; padding:12px 16px; }
+        .shift-opening-panel,.payment-panel { background:#f0fdfa; border:1px solid #99f6e4; border-radius:8px; margin:16px 0; padding:16px; }
+        .shift-opening-panel h3,.payment-panel h3 { margin-top:0; }
+        .shift-opening-panel input,.payment-panel input,.payment-panel select { border:1px solid #94a3b8; border-radius:5px; font:inherit; padding:9px; }
+        .active-shift-note { background:#dcfce7; border-radius:6px; color:#166534; padding:8px 12px; }
+        .payment-fields { display:grid; gap:14px; grid-template-columns:repeat(3,minmax(0,1fr)); margin:12px 0; }
+        .payment-fields .field { display:grid; gap:5px; }
+        .special-discount-fields { grid-template-columns:repeat(2,minmax(0,1fr)); }
+        .promo-label,.eligibility-note { color:#64748b; font-size:.75rem; }
+        .promo-tag { background:#fef3c7; border-radius:999px; color:#92400e; display:inline-block; font-size:.68rem; font-weight:800; padding:2px 6px; }
+        .sale-receipt-modal { border:1px solid #dbe5e3; border-radius:10px; max-height:90vh; max-width:760px; overflow:auto; padding:24px; width:calc(100% - 32px); }
+        .sale-receipt-modal::backdrop { background:rgba(15,23,42,.55); }
+        .receipt-modal-actions { align-items:center; display:flex; gap:10px; justify-content:space-between; }
+        .receipt-modal-actions h2 { margin:0 0 16px; }
+        .receipt-store { text-align:center; }
+        .receipt-modal-table { font-size:.9rem; min-width:540px; }
+        .receipt-modal-table th,.receipt-modal-table td { padding:8px; }
+        .receipt-modal-totals { margin-left:auto; max-width:360px; }
+        .receipt-modal-totals div { display:flex; justify-content:space-between; gap:20px; }
+        .receipt-modal-totals dt,.receipt-modal-totals dd { margin:4px 0; }
+        .receipt-modal-totals dd { font-weight:700; }
+        .receipt-grand-total { border-top:1px solid #94a3b8; color:#115e59; font-size:1.15rem; margin-top:6px !important; padding-top:6px; }
         .customer-scan-success { align-items:center; background:#dcfce7; border:1px solid #86efac; border-radius:10px; color:#166534; display:flex; gap:14px; margin:16px 0; padding:16px 20px; }
         .customer-scan-success[hidden] { display:none; }
         .customer-scan-check { align-items:center; background:#16a34a; border-radius:50%; color:#fff; display:flex; flex:none; font-size:1.6rem; font-weight:800; height:44px; justify-content:center; width:44px; }
@@ -580,6 +767,12 @@
         #pos-reader { max-width:960px; width:100%; }
         #pos-reader video { height:auto !important; max-width:100% !important; width:100% !important; }
         #checkout:disabled { background:#94a3b8; cursor:not-allowed; }
-        @media(max-width:640px) { .pos-scanner-controls { align-items:stretch; flex-direction:column; } .pos-scanner-controls .button { min-height:44px; } }
+        @media print {
+            body * { visibility:hidden !important; }
+            #sale-receipt-modal,#sale-receipt-modal * { visibility:visible !important; }
+            #sale-receipt-modal { border:0; inset:0; max-height:none; max-width:none; overflow:visible; position:absolute; width:100%; }
+            .receipt-modal-actions { display:none !important; }
+        }
+        @media(max-width:640px) { .pos-scanner-controls { align-items:stretch; flex-direction:column; } .pos-scanner-controls .button { min-height:44px; } .payment-fields,.special-discount-fields { grid-template-columns:1fr; } }
     </style>
 @endsection

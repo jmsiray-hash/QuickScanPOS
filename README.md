@@ -14,7 +14,7 @@ This Laravel 12 Point of Sale application demonstrates database-backed customer 
 - User avatars stored as image files with their paths saved in the database
 - Authenticated avatar URLs that work without a public storage symlink
 - Customer Scan & Go carts with customer and cashier QR workflows
-- Mobile item verification required before customer-cart checkout
+- Optional cashier-phone item verification for customer carts
 - Barcode, online phone-camera, and printed product code scanning
 - Printable product QR codes for POS and smartphone scanning
 - Laravel Breeze login, registration, logout, and password management
@@ -92,6 +92,7 @@ DB_DATABASE=<Aiven database name>
 DB_USERNAME=<Aiven username>
 DB_PASSWORD=<Aiven password>
 MYSQL_ATTR_SSL_CA=/etc/secrets/aiven-ca.pem
+POS_VAT_RATE=0
 ```
 
 The password must be copied exactly from Aiven, and the Render service must use the host and port from the same Aiven service. For a password containing special characters, use the unescaped password as the Render environment value.

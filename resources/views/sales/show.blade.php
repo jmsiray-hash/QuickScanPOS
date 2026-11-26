@@ -23,17 +23,24 @@
         <div><dt>Cashier</dt><dd>{{ $sale->user?->name ?? 'Deleted user' }}</dd></div>
         <div><dt>Sale number</dt><dd>#{{ $sale->id }}</dd></div>
         <div><dt>Customer</dt><dd>{{ $sale->customer_name ?: 'Walk-in' }}</dd></div>
+        <div><dt>Payment</dt><dd>{{ strtoupper($sale->payment_method) }}</dd></div>
+        @if ($sale->payment_reference)<div><dt>Payment reference</dt><dd>{{ $sale->payment_reference }}</dd></div>@endif
+        @if ($sale->cash_received !== null)<div><dt>Cash received</dt><dd>₱{{ number_format($sale->cash_received, 2) }}</dd></div><div><dt>Change</dt><dd>₱{{ number_format($sale->change_due, 2) }}</dd></div>@endif
+        @if ($sale->special_discount_type)<div><dt>{{ strtoupper($sale->special_discount_type) }} ID</dt><dd>{{ $sale->special_discount_id_number }}</dd></div>@endif
     </dl>
+    @if ($sale->status === 'voided')
+        <div class="void-receipt-banner">VOIDED by {{ $sale->voidedBy?->name ?? 'Deleted user' }} on {{ $sale->voided_at?->format('M j, Y g:i A') }}. Reason: {{ $sale->void_reason }}</div>
+    @endif
     <div class="table-wrap">
         <table>
             <thead><tr><th>Item</th><th>Barcode</th><th>Qty</th><th>Unit price</th><th>Discount</th><th>Line total</th></tr></thead>
             <tbody>
                 @foreach($sale->items as $item)
                     <tr>
-                        <td>{{ $item->product_name }}</td>
+                        <td>{{ $item->product_name }} @if($item->is_promo)<strong class="promo-tag">PROMO</strong>@endif</td>
                         <td>{{ $item->barcode }}</td>
                         <td>{{ number_format($item->quantity) }}</td>
-                        <td>₱{{ number_format($item->unit_price, 2) }}</td>
+                        <td>@if($item->is_promo)<del>₱{{ number_format($item->unit_price, 2) }}</del><br>₱{{ number_format($item->promo_unit_price, 2) }}@else₱{{ number_format($item->unit_price, 2) }}@endif</td>
                         <td>
                             @if ($item->discount_amount > 0)
                                 {{ strtoupper($item->discount_type) }} {{ number_format($item->discount_percent, 2) }}% (−₱{{ number_format($item->discount_amount, 2) }})
@@ -121,13 +128,18 @@
                     receipt.created_at,
                     'Cashier: ' + ascii(receipt.cashier),
                     receipt.customer_name ? 'Customer: ' + ascii(receipt.customer_name) : '',
+                    'Payment: ' + ascii(String(receipt.payment_method || '').toUpperCase()),
+                    receipt.special_discount_type ? ascii(String(receipt.special_discount_type).toUpperCase() + ' ID: ' + receipt.special_discount_id_number) : '',
+                    receipt.payment_reference ? 'Reference: ' + ascii(receipt.payment_reference) : '',
+                    receipt.cash_received !== null ? 'Cash received: PHP ' + Number(receipt.cash_received).toFixed(2) : '',
+                    receipt.cash_received !== null ? 'Change: PHP ' + Number(receipt.change_due).toFixed(2) : '',
                     rule,
                 ];
 
                 for (const item of receipt.items) {
-                    lines.push(...wrapText(item.name, width));
+                    lines.push(...wrapText(item.name + (item.is_promo ? ' [PROMO]' : ''), width));
                     lines.push(columns(
-                        item.quantity + ' x PHP ' + Number(item.unit_price).toFixed(2),
+                        item.quantity + ' x PHP ' + Number(item.promo_unit_price ?? item.unit_price).toFixed(2),
                         Number(item.line_total).toFixed(2),
                         width,
                     ));
@@ -257,6 +269,8 @@
         .receipt-details dt { color:var(--muted); margin:0; }
         .receipt-details dd { font-weight:700; }
         .receipt-thanks { color:var(--muted); margin-top:28px; text-align:center; }
+        .promo-tag { background:#fef3c7; border-radius:999px; color:#92400e; font-size:.72rem; padding:2px 6px; }
+        .void-receipt-banner { background:#fee2e2; border-radius:6px; color:#991b1b; margin:14px 0; padding:12px; }
         @media print {
             body { background:#fff; }
             .site-header,.site-shell>footer,.receipt-actions,.printer-status { display:none !important; }

@@ -38,6 +38,7 @@
 <div class="field"><label for="selling_price">Selling price</label><input id="selling_price" name="selling_price" type="number" step="0.01" min="0" value="{{ old('selling_price', $product->selling_price) }}" required></div>
 <div class="field"><label for="stock_quantity">Stock quantity</label><input id="stock_quantity" name="stock_quantity" type="number" min="0" value="{{ old('stock_quantity', $product->stock_quantity ?? 0) }}" required></div>
 <label><input type="checkbox" name="is_active" value="1" @checked(old('is_active', $product->is_active))> Active product</label>
+<label><input type="checkbox" name="senior_pwd_eligible" value="1" @checked(old('senior_pwd_eligible', $product->senior_pwd_eligible))> Eligible for Senior/PWD discount (verify BIR eligibility)</label>
 <div class="row-actions product-save-actions">
     <button class="button" type="submit">{{ $submit }}</button>
     @if(!$product->exists)

@@ -31,6 +31,9 @@ class UserController extends Controller
             'avatar.mimetypes' => 'Choose a JPEG, PNG, GIF, WebP, BMP, or AVIF image.',
             'avatar.max' => 'The avatar may not be larger than 2 MB.',
         ]);
+        $validated['role'] = $request->user()->isAdmin()
+            ? $request->validate(['role' => ['required', 'in:cashier,manager,admin']])['role']
+            : 'cashier';
 
         $avatar = $validated['avatar'] ?? null;
         unset($validated['avatar']);
@@ -114,6 +117,11 @@ class UserController extends Controller
             'avatar.mimetypes' => 'Choose a JPEG, PNG, GIF, WebP, BMP, or AVIF image.',
             'avatar.max' => 'The avatar may not be larger than 2 MB.',
         ]);
+        if ($request->user()->isAdmin()) {
+            $validated['role'] = $request->validate(['role' => ['required', 'in:cashier,manager,admin']])['role'];
+        } elseif ($request->exists('role')) {
+            abort(403);
+        }
 
         $avatar = $validated['avatar'] ?? null;
         unset($validated['avatar']);
@@ -180,6 +188,12 @@ class UserController extends Controller
 
     public function destroy(User $user): RedirectResponse
     {
+        if ($user->shifts()->exists()) {
+            return back()->withErrors([
+                'user' => 'This account has shift history and cannot be deleted. Keep it for audit history; change its role if its permissions need to be reduced.',
+            ]);
+        }
+
         if ($user->avatar !== null) {
             Storage::disk('public')->delete($user->avatar);
         }

@@ -194,6 +194,7 @@ class ProductController extends Controller
     {
         $request->merge([
             'barcode' => strtoupper(trim((string) $request->input('barcode'))),
+            'senior_pwd_eligible' => $request->boolean('senior_pwd_eligible'),
         ]);
 
         return $request->validate([
@@ -210,6 +211,7 @@ class ProductController extends Controller
             'selling_price' => ['required', 'numeric', 'min:0'],
             'stock_quantity' => ['required', 'integer', 'min:0'],
             'is_active' => ['sometimes', 'boolean'],
+            'senior_pwd_eligible' => ['required', 'boolean'],
         ]);
     }
 

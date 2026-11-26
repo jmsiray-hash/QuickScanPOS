@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Product;
+use App\Models\CashierShift;
 use App\Models\CustomerCart;
 use App\Models\CustomerCartItem;
 use App\Models\Sale;
@@ -73,6 +74,185 @@ class SalesAndInventoryTest extends TestCase
             ->assertSee('Out of stock milk')
             ->assertDontSee('Low stock cereal')
             ->assertSee('Units in stock');
+    }
+
+    public function test_checkout_requires_an_open_shift(): void
+    {
+        $product = $this->product('SHIFT-REQ-1', 'Shift required item', 5);
+        $this->postJson(route('pos.scan'), ['code' => $product->barcode])->assertOk();
+
+        $this->postJson(route('pos.checkout'), [
+            'payment_method' => 'cash',
+            'cash_received' => 10,
+        ])->assertStatus(409)
+            ->assertJsonPath('message', 'Open a shift and record the opening cash fund before completing a sale.');
+
+        $this->post(route('pos.shift.open'), ['opening_cash' => 100])
+            ->assertRedirect(route('pos.index'));
+        $this->postJson(route('pos.checkout'), [
+            'payment_method' => 'cash',
+            'cash_received' => 10,
+        ])->assertOk()
+            ->assertJsonPath('receipt.change_due', 8);
+    }
+
+    public function test_wallet_checkout_requires_and_records_reference_number(): void
+    {
+        $cashier = auth()->user();
+        CashierShift::create(['user_id' => $cashier->id, 'opening_cash' => 100, 'opened_at' => now()]);
+        $product = $this->product('WALLET-REF-1', 'Wallet item', 5);
+        $this->postJson(route('pos.scan'), ['code' => $product->barcode])->assertOk();
+
+        $this->postJson(route('pos.checkout'), ['payment_method' => 'gcash'])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('payment_reference');
+
+        $checkout = $this->postJson(route('pos.checkout'), [
+            'payment_method' => 'gcash',
+            'payment_reference' => 'GC-12345',
+        ])->assertOk();
+
+        $this->assertDatabaseHas('sales', [
+            'id' => $checkout->json('sale_id'),
+            'payment_method' => 'gcash',
+            'payment_reference' => 'GC-12345',
+            'cash_received' => null,
+        ]);
+    }
+
+    public function test_admin_or_manager_void_restores_stock_and_cashier_is_denied(): void
+    {
+        $cashier = auth()->user();
+        $shift = CashierShift::create(['user_id' => $cashier->id, 'opening_cash' => 50, 'opened_at' => now()]);
+        $product = $this->product('VOID-RESTORE-1', 'Void restore item', 4);
+        $sale = Sale::create([
+            'user_id' => $cashier->id,
+            'shift_id' => $shift->id,
+            'subtotal' => 2,
+            'tax' => 0,
+            'discount' => 0,
+            'total' => 2,
+            'payment_method' => 'cash',
+        ]);
+        $sale->items()->create([
+            'product_id' => $product->id,
+            'barcode' => $product->barcode,
+            'product_name' => $product->name,
+            'quantity' => 1,
+            'unit_price' => 2,
+            'line_total' => 2,
+        ]);
+
+        $this->post(route('sales.void', $sale), ['void_reason' => 'Cashier entered the wrong item'])
+            ->assertForbidden();
+
+        $cashier->update(['role' => 'manager']);
+        $this->post(route('sales.void', $sale), ['void_reason' => 'Cashier entered the wrong item'])
+            ->assertRedirect()
+            ->assertSessionHas('status');
+
+        $this->assertSame(5, $product->fresh()->stock_quantity);
+        $this->assertDatabaseHas('sales', [
+            'id' => $sale->id,
+            'status' => 'voided',
+            'voided_by' => $cashier->id,
+            'void_reason' => 'Cashier entered the wrong item',
+        ]);
+    }
+
+    public function test_shift_closing_saves_expected_actual_and_over_short_with_payment_breakdown(): void
+    {
+        $cashier = auth()->user();
+        $shift = CashierShift::create(['user_id' => $cashier->id, 'opening_cash' => 100, 'opened_at' => now()]);
+        foreach ([['cash', 25], ['gcash', 60]] as [$method, $total]) {
+            Sale::create([
+                'user_id' => $cashier->id,
+                'shift_id' => $shift->id,
+                'subtotal' => $total,
+                'tax' => 0,
+                'discount' => 0,
+                'total' => $total,
+                'payment_method' => $method,
+            ]);
+        }
+
+        $this->post(route('sales.shift.close'), ['actual_cash' => 124])
+            ->assertRedirect(route('sales.index'))
+            ->assertSessionHas('status');
+
+        $this->assertDatabaseHas('cashier_shifts', [
+            'id' => $shift->id,
+            'status' => 'closed',
+            'cash_sales' => 25,
+            'cash_refunds' => 0,
+            'gcash_sales' => 60,
+            'expected_cash' => 125,
+            'actual_cash' => 124,
+            'cash_over_short' => -1,
+        ]);
+    }
+
+    public function test_checkout_records_editable_promo_price_on_receipt(): void
+    {
+        $cashier = auth()->user();
+        CashierShift::create(['user_id' => $cashier->id, 'opening_cash' => 100, 'opened_at' => now()]);
+        $product = $this->product('PROMO-PRICE-1', 'Promo cereal', 5);
+        $this->postJson(route('pos.scan'), ['code' => $product->barcode])->assertOk();
+        $this->postJson(route('pos.cart.update'), [
+            'product_id' => $product->id,
+            'quantity' => 1,
+            'promo_price' => 1.5,
+        ])->assertOk()
+            ->assertJsonPath('cart.items.0.is_promo', true);
+
+        $checkout = $this->postJson(route('pos.checkout'), [
+            'payment_method' => 'cash',
+            'cash_received' => 2,
+        ])->assertOk()
+            ->assertJsonPath('receipt.items.0.is_promo', true)
+            ->assertJsonPath('receipt.items.0.promo_unit_price', 1.5);
+
+        $this->assertDatabaseHas('sale_items', [
+            'sale_id' => $checkout->json('sale_id'),
+            'is_promo' => true,
+            'promo_unit_price' => 1.5,
+            'discount_amount' => 0.5,
+            'line_total' => 1.5,
+        ]);
+    }
+
+    public function test_senior_discount_requires_id_and_exempts_eligible_items_from_vat(): void
+    {
+        config(['pos.vat_rate' => 12]);
+        $cashier = auth()->user();
+        CashierShift::create(['user_id' => $cashier->id, 'opening_cash' => 100, 'opened_at' => now()]);
+        $product = $this->product('SENIOR-VAT-1', 'Eligible item', 5);
+        $product->update(['selling_price' => 112, 'senior_pwd_eligible' => true]);
+        $this->postJson(route('pos.scan'), ['code' => $product->barcode])->assertOk();
+
+        $this->postJson(route('pos.checkout'), [
+            'payment_method' => 'cash',
+            'cash_received' => 80,
+            'special_discount_type' => 'senior',
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors('special_discount_id_number');
+
+        $checkout = $this->postJson(route('pos.checkout'), [
+            'payment_method' => 'cash',
+            'cash_received' => 80,
+            'special_discount_type' => 'senior',
+            'special_discount_id_number' => 'SC-123456',
+        ])->assertOk()
+            ->assertJsonPath('receipt.subtotal', 100)
+            ->assertJsonPath('receipt.tax', 0)
+            ->assertJsonPath('receipt.discount', 20)
+            ->assertJsonPath('receipt.total', 80);
+
+        $this->assertDatabaseHas('sales', [
+            'id' => $checkout->json('sale_id'),
+            'special_discount_type' => 'senior',
+            'special_discount_id_number' => 'SC-123456',
+        ]);
     }
 
     public function test_product_can_be_removed_without_losing_sale_snapshots_or_orphaning_carts(): void

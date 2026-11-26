@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\CustomerCart;
 use App\Models\Customer;
+use App\Models\CashierShift;
 use App\Models\Product;
 use App\Models\Sale;
 use Illuminate\Http\JsonResponse;
@@ -11,6 +12,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use Throwable;
 
 class PosController extends Controller
@@ -21,6 +23,8 @@ class PosController extends Controller
     {
         return view('pos.index', [
             'cart' => $this->cart(),
+            'activeShift' => CashierShift::query()->where('user_id', request()->user()->id)->where('status', 'open')->first(),
+            'vatRate' => (float) config('pos.vat_rate', 0),
         ]);
     }
 
@@ -68,6 +72,8 @@ class PosController extends Controller
                 'available_stock' => $product->stock_quantity,
                 'discount_type' => null,
                 'discount_percent' => 0,
+                'promo_price' => null,
+                'senior_pwd_eligible' => $product->senior_pwd_eligible,
             ];
         }
 
@@ -221,6 +227,8 @@ class PosController extends Controller
             'available_stock' => $product->stock_quantity,
             'discount_type' => $existingLine['discount_type'] ?? null,
             'discount_percent' => $existingLine['discount_percent'] ?? 0,
+            'promo_price' => $existingLine['promo_price'] ?? null,
+            'senior_pwd_eligible' => $product->senior_pwd_eligible,
         ];
         session(['pos_cart' => $cart]);
         $this->syncLinkedCart($cart);
@@ -236,8 +244,9 @@ class PosController extends Controller
         $validated = $request->validate([
             'product_id' => ['required', 'integer'],
             'quantity' => ['required', 'integer', 'min:0'],
-            'discount_type' => ['sometimes', 'nullable', 'in:store,pwd,senior'],
+            'discount_type' => ['sometimes', 'nullable', 'in:store'],
             'discount_percent' => ['sometimes', 'numeric', 'min:0', 'max:100'],
+            'promo_price' => ['sometimes', 'nullable', 'numeric', 'min:0', 'max:99999999.99'],
         ]);
 
         $product = Product::findOrFail($validated['product_id']);
@@ -256,6 +265,7 @@ class PosController extends Controller
                     'unit_price' => (float) $product->selling_price,
                     'discount_type' => null,
                     'discount_percent' => 0,
+                    'promo_price' => null,
                 ];
             }
             $cart[$key]['quantity'] = $quantity;
@@ -269,6 +279,15 @@ class PosController extends Controller
             if (array_key_exists('discount_percent', $validated) && ($cart[$key]['discount_type'] ?? null) !== null) {
                 $cart[$key]['discount_percent'] = (float) $validated['discount_percent'];
             }
+            if (array_key_exists('promo_price', $validated)) {
+                $promoPrice = $validated['promo_price'] === null ? null : (float) $validated['promo_price'];
+                $regularPrice = (float) ($cart[$key]['unit_price'] ?? $product->selling_price);
+                if ($promoPrice !== null && $promoPrice >= $regularPrice) {
+                    return response()->json(['message' => 'Promo price must be lower than the regular selling price.'], 422);
+                }
+                $cart[$key]['promo_price'] = $promoPrice;
+            }
+            $cart[$key]['senior_pwd_eligible'] = $product->senior_pwd_eligible;
             $this->assertDiscountEligible($cart[$key]);
         } else {
             return response()->json(['message' => 'Quantity exceeds stock or the product is inactive.'], 422);
@@ -323,10 +342,33 @@ class PosController extends Controller
             return response()->json(['message' => 'Cart is empty.'], 422);
         }
 
+        $validated = $request->validate([
+            'payment_method' => ['required', 'in:cash,gcash,maya,card'],
+            'cash_received' => ['nullable', 'numeric', 'min:0', 'max:99999999.99'],
+            'payment_reference' => ['required_if:payment_method,gcash,maya', 'nullable', 'string', 'max:100'],
+            'special_discount_type' => ['nullable', 'in:senior,pwd'],
+            'special_discount_id_number' => ['required_with:special_discount_type', 'nullable', 'string', 'max:100'],
+        ]);
+        if ($validated['payment_method'] === 'cash' && ! isset($validated['cash_received'])) {
+            return response()->json(['message' => 'Enter the cash amount received.'], 422);
+        }
+        if (! CashierShift::query()->where('user_id', $request->user()->id)->where('status', 'open')->exists()) {
+            return response()->json(['message' => 'Open a shift and record the opening cash fund before completing a sale.'], 409);
+        }
+
         $customerCartId = session('customer_cart_id');
 
         try {
-            $sale = DB::transaction(function () use ($cart, $customerCartId, $request): Sale {
+            $sale = DB::transaction(function () use ($cart, $customerCartId, $request, $validated): Sale {
+                $shift = CashierShift::query()
+                    ->where('user_id', $request->user()->id)
+                    ->where('status', 'open')
+                    ->lockForUpdate()
+                    ->first();
+                if ($shift === null) {
+                    abort(409, 'Open a shift and record the opening cash fund before completing a sale.');
+                }
+
                 $customerCart = null;
                 if ($customerCartId !== null) {
                     $customerCart = CustomerCart::query()->lockForUpdate()->findOrFail($customerCartId);
@@ -354,7 +396,16 @@ class PosController extends Controller
                     : 0;
                 $subtotal = 0.0;
                 $discountTotal = 0.0;
+                $taxTotal = 0.0;
+                $saleTotal = 0.0;
+                $specialDiscountApplied = false;
                 $lockedProducts = [];
+                $vatRate = (float) config('pos.vat_rate', 0);
+                if ($vatRate < 0 || $vatRate > 100) {
+                    throw new \RuntimeException('POS_VAT_RATE must be between 0 and 100.');
+                }
+                $vatDivider = 1 + ($vatRate / 100);
+                $specialDiscountType = $validated['special_discount_type'] ?? null;
                 foreach ($cart as $line) {
                     $product = Product::query()->lockForUpdate()->findOrFail($line['product_id']);
                     if (! $product->is_active || $product->stock_quantity < $line['quantity']) {
@@ -364,43 +415,98 @@ class PosController extends Controller
                     $unitPrice = $customerCartId !== null
                         ? (float) $line['unit_price']
                         : (float) $product->selling_price;
-                    $grossLineTotal = round($unitPrice * (int) $line['quantity'], 2);
-                    $discountType = $line['discount_type'] ?? null;
-                    $discountPercent = (float) ($line['discount_percent'] ?? 0);
-                    $this->assertDiscountEligible($line, $customer);
-                    $discountAmount = round($grossLineTotal * $discountPercent / 100, 2);
-                    if ($discountType === 'store') {
-                        $discountAmount = min($discountAmount, $remainingStoreDiscount);
-                        $remainingStoreDiscount = round($remainingStoreDiscount - $discountAmount, 2);
+                    $quantity = (int) $line['quantity'];
+                    $grossLineTotal = round($unitPrice * $quantity, 2);
+                    $promoUnitPrice = isset($line['promo_price']) ? (float) $line['promo_price'] : null;
+                    if ($promoUnitPrice !== null && ($promoUnitPrice < 0 || $promoUnitPrice >= $unitPrice)) {
+                        abort(422, 'Promo price for '.$product->name.' must be below its regular price.');
                     }
-                    $discountTotal += $discountAmount;
-                    $lineTotal = round($grossLineTotal - $discountAmount, 2);
-                    $subtotal += $lineTotal;
+                    $appliedUnitPrice = $promoUnitPrice ?? $unitPrice;
+                    $appliedGrossTotal = round($appliedUnitPrice * $quantity, 2);
+                    $originalBase = round($grossLineTotal / $vatDivider, 2);
+                    $appliedBase = round($appliedGrossTotal / $vatDivider, 2);
+                    $promoDiscount = round($originalBase - $appliedBase, 2);
+                    $eligibleForSpecial = $specialDiscountType !== null
+                        && $product->senior_pwd_eligible
+                        && $promoUnitPrice === null;
+
+                    $discountType = $promoUnitPrice !== null ? 'promo' : ($line['discount_type'] ?? null);
+                    $discountPercent = $promoUnitPrice !== null
+                        ? ($unitPrice > 0 ? round((($unitPrice - $promoUnitPrice) / $unitPrice) * 100, 2) : 0)
+                        : (float) ($line['discount_percent'] ?? 0);
+                    $this->assertDiscountEligible($line, $customer);
+                    if ($eligibleForSpecial) {
+                        $specialDiscountApplied = true;
+                        $discountType = $specialDiscountType;
+                        $discountPercent = (float) config('pos.senior_pwd_discount_rate', 20);
+                        $discountAmount = round($appliedBase * $discountPercent / 100, 2);
+                        $lineTax = 0.0;
+                        $lineTotal = round($appliedBase - $discountAmount, 2);
+                    } else {
+                        $discountAmount = $promoUnitPrice === null
+                            ? round($appliedBase * $discountPercent / 100, 2)
+                            : 0.0;
+                        if ($discountType === 'store') {
+                            $discountAmount = min($discountAmount, $remainingStoreDiscount);
+                            $remainingStoreDiscount = round($remainingStoreDiscount - $discountAmount, 2);
+                        }
+                        $netBase = round($appliedBase - $discountAmount, 2);
+                        $lineTax = round($netBase * $vatRate / 100, 2);
+                        $lineTotal = round($netBase + $lineTax, 2);
+                    }
+                    $discountTotal += $promoDiscount + $discountAmount;
+                    $taxTotal += $lineTax;
+                    $subtotal += $originalBase;
+                    $saleTotal += $lineTotal;
                     $lockedProducts[] = [
                         $product,
-                        (int) $line['quantity'],
+                        $quantity,
                         $unitPrice,
+                        $promoUnitPrice,
                         $lineTotal,
                         $discountType,
                         $discountPercent,
-                        $discountAmount,
+                        round($promoDiscount + $discountAmount, 2),
                     ];
+                }
+
+                if ($specialDiscountType !== null && ! $specialDiscountApplied) {
+                    abort(422, 'No products in this cart are marked eligible for the Senior/PWD discount.');
+                }
+
+                $subtotal = round($subtotal, 2);
+                $discountTotal = round($discountTotal, 2);
+                $taxTotal = round($taxTotal, 2);
+                $saleTotal = round($saleTotal, 2);
+                $cashReceived = $validated['payment_method'] === 'cash'
+                    ? (float) $validated['cash_received']
+                    : null;
+                if ($cashReceived !== null && $cashReceived < $saleTotal) {
+                    abort(422, 'Cash received must be at least ₱'.number_format($saleTotal, 2).'.');
                 }
 
                 $sale = Sale::create([
                     'user_id' => $request->user()->id,
                     'customer_id' => $customer?->id,
                     'customer_name' => $customer?->full_name ?? $customerCart?->customer_name,
-                    'subtotal' => round($subtotal + $discountTotal, 2),
-                    'tax' => 0,
-                    'discount' => round($discountTotal, 2),
-                    'total' => $subtotal,
+                    'shift_id' => $shift->id,
+                    'subtotal' => $subtotal,
+                    'tax' => $taxTotal,
+                    'discount' => $discountTotal,
+                    'total' => $saleTotal,
+                    'payment_method' => $validated['payment_method'],
+                    'cash_received' => $cashReceived,
+                    'change_due' => $cashReceived === null ? 0 : round($cashReceived - $saleTotal, 2),
+                    'payment_reference' => $validated['payment_reference'] ?? null,
+                    'special_discount_type' => $specialDiscountType,
+                    'special_discount_id_number' => $validated['special_discount_id_number'] ?? null,
                 ]);
 
                 foreach ($lockedProducts as [
                     $product,
                     $quantity,
                     $unitPrice,
+                    $promoUnitPrice,
                     $lineTotal,
                     $discountType,
                     $discountPercent,
@@ -413,6 +519,8 @@ class PosController extends Controller
                         'product_name' => $product->name,
                         'quantity' => $quantity,
                         'unit_price' => $unitPrice,
+                        'promo_unit_price' => $promoUnitPrice,
+                        'is_promo' => $promoUnitPrice !== null,
                         'discount_type' => $discountType,
                         'discount_percent' => $discountPercent,
                         'discount_amount' => $discountAmount,
@@ -431,7 +539,7 @@ class PosController extends Controller
 
             return response()->json([
                 'message' => $exception->getMessage() ?: 'Checkout failed.',
-            ], 422);
+            ], $exception instanceof HttpExceptionInterface ? $exception->getStatusCode() : 422);
         }
 
         session()->forget([
@@ -442,10 +550,37 @@ class PosController extends Controller
             'pos_customer_id',
         ]);
 
+        $sale->load(['user', 'items']);
         return response()->json([
             'message' => 'Checkout completed.',
             'sale_id' => $sale->id,
             'receipt_url' => route('sales.show', $sale),
+            'receipt' => [
+                'id' => $sale->id,
+                'store' => config('app.name'),
+                'created_at' => $sale->created_at->format('M j, Y g:i A'),
+                'cashier' => $sale->user?->name ?? 'Cashier',
+                'customer_name' => $sale->customer_name,
+                'subtotal' => (float) $sale->subtotal,
+                'tax' => (float) $sale->tax,
+                'discount' => (float) $sale->discount,
+                'total' => (float) $sale->total,
+                'payment_method' => $sale->payment_method,
+                'payment_reference' => $sale->payment_reference,
+                'special_discount_type' => $sale->special_discount_type,
+                'special_discount_id_number' => $sale->special_discount_id_number,
+                'cash_received' => $sale->cash_received === null ? null : (float) $sale->cash_received,
+                'change_due' => (float) $sale->change_due,
+                'items' => $sale->items->map(static fn ($item): array => [
+                    'name' => $item->product_name,
+                    'quantity' => $item->quantity,
+                    'unit_price' => (float) $item->unit_price,
+                    'promo_unit_price' => $item->promo_unit_price === null ? null : (float) $item->promo_unit_price,
+                    'is_promo' => $item->is_promo,
+                    'discount_amount' => (float) $item->discount_amount,
+                    'line_total' => (float) $item->line_total,
+                ])->values(),
+            ],
             'cart' => $this->cart(),
         ]);
     }
@@ -519,30 +654,52 @@ class PosController extends Controller
             : $customerCart?->customer;
         $subtotal = 0.0;
         $discount = 0.0;
+        $tax = 0.0;
+        $total = 0.0;
         $remaining = $customer
             ? max(0, (float) $customer->monthly_discount_limit - $this->monthlyStoreDiscountUsed($customer))
             : 0;
+        $vatRate = (float) config('pos.vat_rate', 0);
+        $vatDivider = 1 + ($vatRate / 100);
 
         foreach ($items as &$item) {
-            $lineSubtotal = round((int) $item['quantity'] * (float) $item['unit_price'], 2);
-            $lineDiscount = round($lineSubtotal * (float) ($item['discount_percent'] ?? 0) / 100, 2);
+            $quantity = (int) $item['quantity'];
+            $unitPrice = (float) $item['unit_price'];
+            $promoPrice = isset($item['promo_price']) ? (float) $item['promo_price'] : null;
+            $lineSubtotal = round($quantity * $unitPrice, 2);
+            $appliedGross = round($quantity * ($promoPrice ?? $unitPrice), 2);
+            $originalBase = round($lineSubtotal / $vatDivider, 2);
+            $appliedBase = round($appliedGross / $vatDivider, 2);
+            $promoDiscount = round($originalBase - $appliedBase, 2);
+            $lineDiscount = $promoPrice === null
+                ? round($appliedBase * (float) ($item['discount_percent'] ?? 0) / 100, 2)
+                : 0;
             if (($item['discount_type'] ?? null) === 'store') {
                 $lineDiscount = min($lineDiscount, $remaining);
                 $remaining = round($remaining - $lineDiscount, 2);
             }
-            $item['discount_amount'] = $lineDiscount;
-            $item['line_total'] = round($lineSubtotal - $lineDiscount, 2);
-            $subtotal += $lineSubtotal;
-            $discount += $lineDiscount;
+            $netBase = round($appliedBase - $lineDiscount, 2);
+            $item['promo_price'] = $promoPrice;
+            $item['is_promo'] = $promoPrice !== null;
+            $item['promo_discount'] = $promoDiscount;
+            $item['senior_pwd_eligible'] = (bool) ($item['senior_pwd_eligible'] ?? false);
+            $item['discount_amount'] = round($promoDiscount + $lineDiscount, 2);
+            $item['tax_amount'] = round($netBase * $vatRate / 100, 2);
+            $item['line_total'] = round($netBase + $item['tax_amount'], 2);
+            $subtotal += $originalBase;
+            $discount += $promoDiscount + $lineDiscount;
+            $tax += $item['tax_amount'];
+            $total += $item['line_total'];
         }
         unset($item);
 
         return [
             'items' => $items,
             'subtotal' => round($subtotal, 2),
-            'tax' => 0,
+            'tax' => round($tax, 2),
             'discount' => round($discount, 2),
-            'total' => round($subtotal - $discount, 2),
+            'total' => round($total, 2),
+            'vat_rate' => $vatRate,
             'customer_cart_token' => session('customer_cart_token'),
             'customer_name' => $customer?->full_name ?? $customerCart?->customer_name,
             'customer_id' => $customer?->id,

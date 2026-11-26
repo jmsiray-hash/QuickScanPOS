@@ -28,6 +28,17 @@
                 <p class="error">{{ $message }}</p>
             @enderror
         </div>
+        @if (auth()->user()->isAdmin())
+            <div class="field">
+                <label for="role">Role</label>
+                <select id="role" name="role" required>
+                    <option value="cashier" @selected(old('role', $user->role) === 'cashier')>Cashier</option>
+                    <option value="manager" @selected(old('role', $user->role) === 'manager')>Manager</option>
+                    <option value="admin" @selected(old('role', $user->role) === 'admin')>Admin</option>
+                </select>
+                @error('role')<p class="error">{{ $message }}</p>@enderror
+            </div>
+        @endif
         <div class="field">
             <label for="avatar">Avatar</label>
             <img

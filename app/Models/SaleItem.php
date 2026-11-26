@@ -17,6 +17,8 @@ class SaleItem extends Model
         'discount_type',
         'discount_percent',
         'discount_amount',
+        'promo_unit_price',
+        'is_promo',
         'line_total',
     ];
 
@@ -28,6 +30,8 @@ class SaleItem extends Model
             'discount_percent' => 'decimal:2',
             'discount_amount' => 'decimal:2',
             'line_total' => 'decimal:2',
+            'promo_unit_price' => 'decimal:2',
+            'is_promo' => 'boolean',
         ];
     }
 

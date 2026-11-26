@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\CustomerCart;
 use App\Models\CustomerCartItem;
 use App\Models\Customer;
+use App\Models\CashierShift;
 use App\Models\Product;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -19,7 +20,13 @@ class ScanAndGoTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->actingAs(User::factory()->create());
+        $cashier = User::factory()->create();
+        $this->actingAs($cashier);
+        CashierShift::create([
+            'user_id' => $cashier->id,
+            'opening_cash' => 100,
+            'opened_at' => now(),
+        ]);
         $this->signInShopper('Default Shopper');
     }
 
@@ -423,7 +430,7 @@ class ScanAndGoTest extends TestCase
             ->assertUnprocessable()
             ->assertJsonPath('message', 'Mismatch: the expected quantity for this item has already been checked.');
 
-        $this->postJson(route('pos.checkout'))
+        $this->postJson(route('pos.checkout'), ['payment_method' => 'cash', 'cash_received' => 10000])
             ->assertOk()
             ->assertJsonPath('message', 'Checkout completed.');
 
@@ -512,7 +519,7 @@ class ScanAndGoTest extends TestCase
         ]);
 
         $this->getJson(route('pos.import-cart', $cart->token))->assertOk();
-        $this->postJson(route('pos.checkout'))
+        $this->postJson(route('pos.checkout'), ['payment_method' => 'cash', 'cash_received' => 10000])
             ->assertOk()
             ->assertJsonPath('message', 'Checkout completed.');
 
@@ -581,7 +588,7 @@ class ScanAndGoTest extends TestCase
         $this->postJson(route('pos.scan'), ['barcode' => $product->barcode])->assertOk();
         $product->update(['selling_price' => 7.00]);
 
-        $checkout = $this->postJson(route('pos.checkout'))
+        $checkout = $this->postJson(route('pos.checkout'), ['payment_method' => 'cash', 'cash_received' => 10000])
             ->assertOk()
             ->assertJsonPath('message', 'Checkout completed.');
 
@@ -712,7 +719,7 @@ class ScanAndGoTest extends TestCase
             ->assertJsonPath('cart.discount', 5)
             ->assertJsonPath('cart.total', 15);
 
-        $checkout = $this->postJson(route('pos.checkout'))->assertOk();
+        $checkout = $this->postJson(route('pos.checkout'), ['payment_method' => 'cash', 'cash_received' => 10000])->assertOk();
         $sale = \App\Models\Sale::findOrFail($checkout->json('sale_id'));
         $this->assertSame($customer->id, $sale->customer_id);
         $this->assertSame('Quota Shopper', $sale->customer_name);
@@ -750,29 +757,27 @@ class ScanAndGoTest extends TestCase
         ]);
         $this->postJson(route('pos.customer.select'), ['customer_id' => $customer->id])->assertOk();
         $product = $this->product('PWD-ITEM-1', 2, 20.00);
+        $product->update(['senior_pwd_eligible' => true]);
         $this->postJson(route('pos.scan'), ['code' => $product->barcode])->assertOk();
 
         $this->postJson(route('pos.cart.update'), [
             'product_id' => $product->id,
             'quantity' => 1,
-            'discount_type' => 'senior',
-            'discount_percent' => 10,
-        ])->assertUnprocessable()
-            ->assertJsonPath('message', 'The customer does not have a recorded SENIOR ID.');
-
-        $this->postJson(route('pos.cart.update'), [
-            'product_id' => $product->id,
-            'quantity' => 1,
-            'discount_type' => 'pwd',
-            'discount_percent' => 10,
         ])->assertOk();
-        $checkout = $this->postJson(route('pos.checkout'))->assertOk();
+        $checkout = $this->postJson(route('pos.checkout'), [
+            'payment_method' => 'cash',
+            'cash_received' => 10000,
+            'special_discount_type' => 'pwd',
+            'special_discount_id_number' => 'PWD-001',
+        ])->assertOk();
         $sale = \App\Models\Sale::findOrFail($checkout->json('sale_id'));
-        $this->assertSame('2.00', $sale->discount);
+        $this->assertSame('4.00', $sale->discount);
+        $this->assertSame('PWD-001', $sale->special_discount_id_number);
         $this->assertDatabaseHas('sale_items', [
             'sale_id' => $sale->id,
             'discount_type' => 'pwd',
-            'discount_amount' => 2,
+            'discount_percent' => 20,
+            'discount_amount' => 4,
         ]);
         $this->getJson(route('customers.lookup', ['search' => 'PWD Shopper']))
             ->assertOk()
