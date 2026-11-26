@@ -76,6 +76,40 @@ class SalesAndInventoryTest extends TestCase
             ->assertSee('Units in stock');
     }
 
+    public function test_pos_can_search_products_and_manually_add_the_selected_quantity_to_cart(): void
+    {
+        $product = $this->product('MANUAL-POS-1', 'Manually Added Rice', 8);
+        $this->product('MANUAL-POS-EMPTY', 'Out of stock rice', 0);
+
+        $this->get(route('pos.index'))
+            ->assertOk()
+            ->assertSee('Add Product Manually')
+            ->assertSee('Product name or barcode')
+            ->assertSee('Products added here use their catalog price');
+
+        $this->getJson(route('products.search-for-pos', ['q' => 'Manual']))
+            ->assertOk()
+            ->assertJsonCount(1, 'products')
+            ->assertJsonPath('products.0.id', $product->id)
+            ->assertJsonPath('products.0.name', 'Manually Added Rice')
+            ->assertJsonPath('products.0.price', 2)
+            ->assertJsonPath('products.0.stock_quantity', 8);
+
+        $this->postJson(route('pos.cart.update'), [
+            'product_id' => $product->id,
+            'quantity' => 3,
+        ])->assertOk()
+            ->assertJsonPath('cart.items.0.product_id', $product->id)
+            ->assertJsonPath('cart.items.0.quantity', 3)
+            ->assertJsonPath('cart.items.0.line_total', 6)
+            ->assertJsonPath('cart.total', 6);
+
+        $this->postJson(route('pos.cart.update'), [
+            'product_id' => $product->id,
+            'quantity' => 9,
+        ])->assertUnprocessable();
+    }
+
     public function test_checkout_requires_an_open_shift(): void
     {
         $product = $this->product('SHIFT-REQ-1', 'Shift required item', 5);

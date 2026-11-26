@@ -36,6 +36,29 @@
 
     <p class="cashier-flow-hint">Scan the customer's final checkout QR to load their items. You can proceed to checkout immediately; cashier-phone item verification is optional and can be used as an extra check when needed. Use <strong>Connect Cashier Phone</strong> to create a verification QR. It works online over HTTPS; no Bluetooth pairing is needed.</p>
 
+    <section class="manual-product-panel" aria-labelledby="manual-product-title">
+        <h3 id="manual-product-title">Add Product Manually</h3>
+        <p>Search the product catalog by name, barcode, or category, then add the quantity directly to the cart.</p>
+        <div class="manual-product-controls">
+            <div class="field">
+                <label for="manual-product-search">Product name or barcode</label>
+                <input id="manual-product-search" type="search" maxlength="100" autocomplete="off" placeholder="Type at least 2 characters">
+            </div>
+            <div class="field">
+                <label for="manual-product-choice">Matching products</label>
+                <select id="manual-product-choice" disabled>
+                    <option value="">Search for a product first</option>
+                </select>
+            </div>
+            <div class="field manual-product-quantity">
+                <label for="manual-product-quantity">Quantity</label>
+                <input id="manual-product-quantity" type="number" min="1" step="1" value="1">
+            </div>
+            <button class="button" id="add-manual-product" type="button" disabled>Add to Cart</button>
+        </div>
+        <p id="manual-product-message" class="field-hint" role="status">Products added here use their catalog price and are displayed in the cart below.</p>
+    </section>
+
     <section class="customer-discount-panel">
         <h3>Customer &amp; Discounts</h3>
         <div class="row-actions">
@@ -137,6 +160,7 @@
             const verificationCreateUrl = @json(route('pos.verification.create'));
             const customerLookupUrl = @json(route('customers.lookup'));
             const customerSelectUrl = @json(route('pos.customer.select'));
+            const manualProductSearchUrl = @json(route('products.search-for-pos'));
             const hasOpenShift = @json($activeShift !== null);
             const vatRate = @json($vatRate);
             let currentCart = null;
@@ -152,6 +176,8 @@
             let polledStatusUrl = null;
             let selectedCustomerId = null;
             let discountIdType = null;
+            let manualSearchTimer = null;
+            let manualSearchRequest = 0;
 
             const money = amount => '₱' + Number(amount).toFixed(2);
             const escapeHtml = value => String(value).replace(/[&<>"']/g, char => ({
@@ -217,6 +243,30 @@
                 const result = await response.json();
                 if (!response.ok) throw new Error(result.message || 'The request could not be completed.');
                 return result;
+            }
+            async function searchManualProducts(query) {
+                const choice = document.getElementById('manual-product-choice');
+                const message = document.getElementById('manual-product-message');
+                const requestId = ++manualSearchRequest;
+                choice.disabled = true;
+                choice.innerHTML = '<option value="">Searching products...</option>';
+                document.getElementById('add-manual-product').disabled = true;
+                try {
+                    const result = await request(manualProductSearchUrl + '?q=' + encodeURIComponent(query));
+                    if (requestId !== manualSearchRequest) return;
+                    choice.innerHTML = '<option value="">Select a product</option>' + result.products.map(product =>
+                        `<option value="${product.id}" data-stock="${product.stock_quantity}">${escapeHtml(product.name)} · ${escapeHtml(product.barcode)} · ${money(product.price)} · ${product.stock_quantity} in stock</option>`
+                    ).join('');
+                    choice.disabled = result.products.length === 0;
+                    message.textContent = result.products.length
+                        ? `${result.products.length} matching in-stock product${result.products.length === 1 ? '' : 's'} found.`
+                        : 'No matching in-stock products. Check the name or barcode.';
+                } catch (error) {
+                    if (requestId !== manualSearchRequest) return;
+                    choice.innerHTML = '<option value="">Could not load products</option>';
+                    message.textContent = error.message;
+                    choice.disabled = true;
+                }
             }
             function render(cart) {
                 currentCart = cart;
@@ -424,9 +474,11 @@
                         document.getElementById('verification-badge').hidden = true;
                     }
                     render(result.cart);
+                    return true;
                 } catch (error) {
                     show(error.message, true);
                     beep(true);
+                    return false;
                 } finally {
                     if (document.activeElement?.classList.contains('pos-quantity')) {
                         document.activeElement.blur();
@@ -434,6 +486,50 @@
                     focusScanner();
                 }
             }
+            document.getElementById('manual-product-search').addEventListener('input', event => {
+                const query = event.target.value.trim();
+                if (manualSearchTimer) window.clearTimeout(manualSearchTimer);
+                manualSearchRequest++;
+                const choice = document.getElementById('manual-product-choice');
+                choice.disabled = true;
+                choice.innerHTML = '<option value="">Search for a product first</option>';
+                document.getElementById('add-manual-product').disabled = true;
+                if (query.length < 2) {
+                    document.getElementById('manual-product-message').textContent = 'Type at least 2 characters to search available products.';
+                    return;
+                }
+                manualSearchTimer = window.setTimeout(() => searchManualProducts(query), 250);
+            });
+            document.getElementById('manual-product-choice').addEventListener('change', event => {
+                document.getElementById('add-manual-product').disabled = !event.target.value;
+            });
+            document.getElementById('add-manual-product').addEventListener('click', async () => {
+                const choice = document.getElementById('manual-product-choice');
+                const productId = Number(choice.value);
+                const quantityInput = document.getElementById('manual-product-quantity');
+                const quantityToAdd = Number(quantityInput.value);
+                const currentItem = currentCart?.items?.find(item => Number(item.product_id) === productId);
+                const targetQuantity = Number(currentItem?.quantity || 0) + quantityToAdd;
+                const selectedOption = choice.selectedOptions[0];
+                const stock = Number(selectedOption?.dataset.stock || 0);
+                if (!productId || !Number.isInteger(quantityToAdd) || quantityToAdd < 1) {
+                    show('Select a product and enter a whole quantity of at least 1.', true);
+                    return;
+                }
+                if (targetQuantity > stock) {
+                    show(`Only ${stock} unit(s) are currently in stock.`, true);
+                    return;
+                }
+                const added = await update(productId, targetQuantity);
+                if (added) {
+                    document.getElementById('manual-product-message').textContent = 'Product added to the cart below.';
+                    document.getElementById('manual-product-search').value = '';
+                    choice.innerHTML = '<option value="">Search for a product first</option>';
+                    choice.disabled = true;
+                    document.getElementById('add-manual-product').disabled = true;
+                    quantityInput.value = '1';
+                }
+            });
             function checkoutTotal() {
                 if (!currentCart) return 0;
                 let total = Number(currentCart.total || 0);
@@ -723,6 +819,13 @@
         .pos-scanner-controls { flex-wrap:wrap; width:100%; }
         .pos-scanner-controls input { flex:1; min-width:230px; border:1px solid #94a3b8; border-radius:5px; font:inherit; padding:10px; }
         .cashier-flow-hint { background:#f0fdfa; border-left:4px solid #0f766e; margin:16px 0; padding:12px 16px; }
+        .manual-product-panel { background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px; margin:18px 0; padding:16px; }
+        .manual-product-panel h3 { margin:0; }
+        .manual-product-controls { align-items:end; display:grid; gap:12px; grid-template-columns:minmax(180px,1fr) minmax(240px,1.3fr) 100px auto; }
+        .manual-product-controls .field { display:grid; gap:5px; }
+        .manual-product-controls input,.manual-product-controls select { border:1px solid #94a3b8; border-radius:5px; font:inherit; min-width:0; padding:9px; width:100%; }
+        .manual-product-controls #add-manual-product { min-height:42px; }
+        .manual-product-controls #add-manual-product:disabled { background:#94a3b8; cursor:not-allowed; }
         .shift-opening-panel,.payment-panel { background:#f0fdfa; border:1px solid #99f6e4; border-radius:8px; margin:16px 0; padding:16px; }
         .shift-opening-panel h3,.payment-panel h3 { margin-top:0; }
         .shift-opening-panel input,.payment-panel input,.payment-panel select { border:1px solid #94a3b8; border-radius:5px; font:inherit; padding:9px; }
@@ -773,6 +876,7 @@
             #sale-receipt-modal { border:0; inset:0; max-height:none; max-width:none; overflow:visible; position:absolute; width:100%; }
             .receipt-modal-actions { display:none !important; }
         }
+        @media(max-width:760px) { .manual-product-controls { grid-template-columns:1fr; } .manual-product-controls #add-manual-product { min-height:44px; } }
         @media(max-width:640px) { .pos-scanner-controls { align-items:stretch; flex-direction:column; } .pos-scanner-controls .button { min-height:44px; } .payment-fields,.special-discount-fields { grid-template-columns:1fr; } }
     </style>
 @endsection

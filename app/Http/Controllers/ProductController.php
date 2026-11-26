@@ -190,6 +190,36 @@ class ProductController extends Controller
         ]);
     }
 
+    public function searchForPos(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'q' => ['required', 'string', 'min:2', 'max:100'],
+        ]);
+        $term = trim($validated['q']);
+        $products = Product::query()
+            ->where('is_active', true)
+            ->where('stock_quantity', '>', 0)
+            ->where(function ($query) use ($term): void {
+                $query->where('name', 'like', '%'.$term.'%')
+                    ->orWhere('barcode', 'like', '%'.$term.'%')
+                    ->orWhere('category', 'like', '%'.$term.'%');
+            })
+            ->orderBy('name')
+            ->limit(12)
+            ->get(['id', 'name', 'barcode', 'category', 'selling_price', 'stock_quantity']);
+
+        return response()->json([
+            'products' => $products->map(static fn (Product $product): array => [
+                'id' => $product->id,
+                'name' => $product->name,
+                'barcode' => $product->barcode,
+                'category' => $product->category,
+                'price' => (float) $product->selling_price,
+                'stock_quantity' => $product->stock_quantity,
+            ])->values(),
+        ]);
+    }
+
     private function validated(Request $request, ?Product $product = null): array
     {
         $request->merge([

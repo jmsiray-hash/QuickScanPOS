@@ -55,6 +55,7 @@ Route::middleware('auth')->group(function(){
  Route::post('/products/phone-scan',[PhoneProductScanController::class,'create'])->name('products.phone-scan.create');
  Route::get('/products/phone-scan/{token}/result',[PhoneProductScanController::class,'result'])->name('products.phone-scan.result');
  Route::get('/api/products/lookup',[ProductController::class,'lookup'])->name('products.lookup');
+ Route::get('/api/products/search-for-pos',[ProductController::class,'searchForPos'])->name('products.search-for-pos');
  Route::get('/api/customers/lookup',[CustomerController::class,'lookup'])->name('customers.lookup');
  Route::get('/pos/store-qr',[PosController::class,'storeQr'])->name('pos.store-qr');
  Route::get('/pos/import-cart/{token}',[PosController::class,'importCart'])->name('pos.import-cart');
