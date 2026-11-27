@@ -11,7 +11,7 @@
         .site-shell { display:grid; grid-template-columns:246px minmax(0,1fr); min-height:100vh; } .site-content { display:flex; flex-direction:column; min-width:0; padding:28px 32px; }
         .site-sidebar { background:#102a20; color:#d5e4d9; display:flex; flex-direction:column; gap:26px; min-height:100vh; padding:28px 16px 18px; }
         .sidebar-brand { align-items:center; color:#f3f8f3; display:flex; font-size:1.05rem; font-weight:800; gap:12px; letter-spacing:-.02em; text-decoration:none; }
-        .sidebar-brand-mark { align-items:center; background:#15795d; border-radius:11px; color:#fff; display:flex; font-size:1.15rem; height:42px; justify-content:center; width:42px; }
+        .sidebar-brand-mark { background:#fff; border:1px solid rgba(255,255,255,.2); border-radius:11px; display:block; flex:none; height:42px; object-fit:cover; width:42px; }
         .sidebar-context { background:rgba(255,255,255,.055); border:1px solid rgba(255,255,255,.09); border-radius:12px; padding:12px; }
         .sidebar-context span { color:#91ad9d; display:block; font-size:.62rem; letter-spacing:.12em; text-transform:uppercase; }
         .sidebar-context strong { color:#f1f8f2; display:block; font-size:.86rem; margin-top:3px; overflow-wrap:anywhere; }
@@ -54,7 +54,7 @@
 <body class="{{ request()->routeIs('cashier-dashboard') ? 'cashier-app-body' : '' }}{{ request()->routeIs('dashboard') ? ' dashboard-page' : '' }}">
 <div class="site-shell {{ request()->routeIs('cashier-dashboard') ? 'cashier-app-shell' : '' }}">
     <aside class="site-sidebar">
-        <a class="sidebar-brand" href="{{ route('home') }}"><span class="sidebar-brand-mark" aria-hidden="true">₱</span>QuickScanPos</a>
+        <a class="sidebar-brand" href="{{ route('home') }}"><img class="sidebar-brand-mark" src="{{ asset('images/quickscanpos-logo.png') }}" alt="">QuickScanPos</a>
         @auth
             <div class="sidebar-context">
                 <span>Signed in as</span>
@@ -70,6 +70,7 @@
                 <a class="{{ request()->routeIs('sales.*') ? 'is-active' : '' }}" href="{{ route('sales.index') }}" @if (request()->routeIs('sales.*')) aria-current="page" @endif><span class="sidebar-nav-icon" aria-hidden="true">₱</span>Sales Reports</a>
                 <a class="{{ request()->routeIs('customers.*') ? 'is-active' : '' }}" href="{{ route('customers.index') }}" @if (request()->routeIs('customers.*')) aria-current="page" @endif><span class="sidebar-nav-icon" aria-hidden="true">♙</span>Customers</a>
                 <a class="{{ request()->routeIs('customer-activity.*') ? 'is-active' : '' }}" href="{{ route('customer-activity.index') }}" @if (request()->routeIs('customer-activity.*')) aria-current="page" @endif><span class="sidebar-nav-icon" aria-hidden="true">◉</span>Scan &amp; Go Customers</a>
+                <a class="{{ request()->routeIs('ratings.*') ? 'is-active' : '' }}" href="{{ route('ratings.index') }}" @if (request()->routeIs('ratings.*')) aria-current="page" @endif><span class="sidebar-nav-icon" aria-hidden="true">★</span>Ratings</a>
                 @if (auth()->user()->isAdmin())
                     <a class="{{ request()->routeIs('settings.store.*') ? 'is-active' : '' }}" href="{{ route('settings.store.edit') }}" @if (request()->routeIs('settings.store.*')) aria-current="page" @endif><span class="sidebar-nav-icon" aria-hidden="true">⚙</span>Company Settings</a>
                 @endif

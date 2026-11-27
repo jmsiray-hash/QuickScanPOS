@@ -9,6 +9,25 @@ use Illuminate\View\View;
 
 class CustomerActivityController extends Controller
 {
+    public function ratings(): View
+    {
+        $ratedCarts = CustomerCart::query()
+            ->whereNotNull('service_rating')
+            ->whereNotNull('rated_at');
+
+        $summary = (clone $ratedCarts)
+            ->selectRaw('COUNT(*) as rating_count, AVG(service_rating) as average_rating')
+            ->first();
+
+        $ratings = $ratedCarts
+            ->with('sale')
+            ->withCount('items')
+            ->latest('rated_at')
+            ->paginate(30);
+
+        return view('customers.ratings', compact('ratings', 'summary'));
+    }
+
     public function index(): View
     {
         $carts = CustomerCart::query()

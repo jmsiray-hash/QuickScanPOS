@@ -9,6 +9,7 @@
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5m0 0 7 7m-7-7 7-7"/></svg>
             </a>
             <div class="cashier-title-group">
+                <img class="cashier-brand-logo" src="{{ asset('images/quickscanpos-logo.png') }}" alt="">
                 <h1>QuickScan POS Register</h1>
             </div>
             <div class="cashier-topbar-actions">
@@ -246,7 +247,7 @@
                     <small>Discount applies to catalog-eligible items only. PROMO items are excluded.</small>
                 </section>
 
-                <button id="open-payment-dialog" class="open-payment-button" type="button" disabled>
+                <button id="open-payment-dialog" class="open-payment-button" type="button">
                     <span>Payment</span><strong id="payment-button-total">₱0.00</strong>
                 </button>
             </aside>
@@ -267,6 +268,9 @@
             <button type="button" class="tray-action" data-cashier-view="sales-report">
                 <span aria-hidden="true">₱</span><span>Today's sales</span>
             </button>
+            <a class="tray-action" href="{{ route('ratings.index') }}">
+                <span aria-hidden="true">★</span><span>Ratings</span>
+            </a>
             <a class="tray-action" href="{{ route('customer-activity.index') }}">
                 <span aria-hidden="true">◉</span><span>Customer carts</span>
             </a>
@@ -300,7 +304,8 @@
             <h2>Payment complete</h2>
             <p id="sale-complete-message"></p>
             <div class="sale-dialog-actions">
-                <a id="sale-receipt-link" class="cashier-secondary-button" href="#">View receipt</a>
+                <a id="sale-receipt-link" class="cashier-secondary-button" href="#" target="_blank" rel="noopener">View receipt</a>
+                <button id="print-sale-receipt" class="cashier-primary-button" type="button">Print receipt</button>
                 <button id="close-sale-dialog" class="cashier-primary-button" type="button">Continue</button>
             </div>
         </dialog>
@@ -318,6 +323,7 @@
                 <div><span>Discount</span><strong id="payment-dialog-discount">−₱0.00</strong></div>
                 <div><span>Tax</span><strong id="payment-dialog-tax">₱0.00</strong></div>
             </div>
+            <p id="payment-empty-message" class="payment-empty-message" hidden>Add products to the cart before completing payment.</p>
             <section class="payment-section">
                 <div class="payment-options" role="group" aria-label="Payment method">
                     <button type="button" class="payment-option selected" data-method="cash">Cash</button>
@@ -415,6 +421,7 @@
             let cart = null;
             let orderStarted = false;
             let paymentMethod = 'cash';
+            let paymentRefreshInProgress = false;
             let submitting = false;
 
             const money = value => '₱' + Number(value || 0).toFixed(2);
@@ -726,12 +733,13 @@
                     : (!['gcash', 'maya'].includes(paymentMethod) || document.getElementById('payment-reference').value.trim() !== '');
                 document.getElementById('complete-sale').disabled =
                     !hasOpenShift || !cart?.items?.length || !ready
-                    || (discountType !== '' && (!discountId || !hasEligibleItems)) || submitting;
-                document.getElementById('complete-sale').textContent = submitting
-                    ? 'Processing payment…'
-                    : 'Complete payment · ₱' + due.toFixed(2);
+                    || (discountType !== '' && (!discountId || !hasEligibleItems))
+                    || submitting || paymentRefreshInProgress;
+                document.getElementById('complete-sale').textContent = paymentRefreshInProgress
+                    ? 'Refreshing cart…'
+                    : (submitting ? 'Processing payment…' : 'Complete payment · ₱' + due.toFixed(2));
                 document.getElementById('complete-sale').setAttribute('aria-busy', String(submitting));
-                openPaymentDialogButton.disabled = !cart?.items?.length || submitting;
+                document.getElementById('payment-empty-message').hidden = Boolean(cart?.items?.length);
                 document.getElementById('discount-id').disabled = discountType === '' || !hasEligibleItems;
                 document.getElementById('discount-id').placeholder = hasEligibleItems
                     ? 'Enter Senior/PWD ID'
@@ -1118,12 +1126,28 @@
             });
             document.getElementById('cash-received').addEventListener('input', updatePaymentState);
             document.getElementById('payment-reference').addEventListener('input', updatePaymentState);
-            openPaymentDialogButton.addEventListener('click', () => {
-                if (!cart?.items?.length || paymentDialog.open) return;
+            openPaymentDialogButton.addEventListener('click', async () => {
+                if (paymentDialog.open) return;
                 document.getElementById('payment-error').hidden = true;
                 paymentDialog.showModal();
+                paymentRefreshInProgress = true;
+                updatePaymentState();
                 if (paymentMethod === 'cash') document.getElementById('cash-received').focus();
                 else if (['gcash', 'maya'].includes(paymentMethod)) document.getElementById('payment-reference').focus();
+                try {
+                    await refreshCart();
+                } catch (error) {
+                    document.getElementById('payment-error').textContent = error.message || 'Could not refresh the cart totals.';
+                    document.getElementById('payment-error').hidden = false;
+                } finally {
+                    paymentRefreshInProgress = false;
+                    updatePaymentState();
+                }
+            });
+            document.getElementById('print-sale-receipt').addEventListener('click', () => {
+                const receiptUrl = new URL(document.getElementById('sale-receipt-link').href);
+                receiptUrl.searchParams.set('print', '1');
+                window.open(receiptUrl.toString(), '_blank', 'noopener');
             });
             document.getElementById('close-payment-dialog').addEventListener('click', () => paymentDialog.close());
             paymentDialog.addEventListener('click', event => {
@@ -1276,7 +1300,8 @@
         .cashier-app .pagination a { color:#d5e0e9; }
         .cashier-app { display:flex; flex:1; flex-direction:column; min-height:0; }
         .cashier-topbar { align-items:center; display:flex; flex:none; gap:10px; justify-content:space-between; margin-bottom:7px; min-height:38px; }
-        .cashier-title-group { align-items:baseline; display:flex; flex:1; gap:10px; min-width:155px; white-space:nowrap; }
+        .cashier-title-group { align-items:center; display:flex; flex:1; gap:8px; min-width:155px; white-space:nowrap; }
+        .cashier-brand-logo { background:#fff; border:1px solid #405363; border-radius:7px; flex:none; height:30px; object-fit:cover; width:30px; }
         .cashier-kicker { color:#74e4d3; font-size:.56rem; font-weight:800; letter-spacing:.1em; margin:0; }
         .cashier-topbar h1 { color:#f8fafc; font-size:1.2rem; letter-spacing:-.035em; margin:0; }
         .cashier-topbar-actions { align-items:center; display:flex; flex:none; gap:6px; white-space:nowrap; }
@@ -1447,7 +1472,7 @@
         .sale-dialog-icon { align-items:center; background:#0e5447; border:1px solid #20b89c; border-radius:50%; color:#9af3d4; display:flex; font-size:2rem; height:60px; justify-content:center; margin:0 auto 13px; width:60px; }
         .sale-dialog h2 { color:#f8fafc; margin:0; }
         .sale-dialog p { color:#b5c3cf; }
-        .sale-dialog-actions { display:flex; gap:10px; justify-content:center; }
+        .sale-dialog-actions { display:flex; flex-wrap:wrap; gap:10px; justify-content:center; }
         .clear-cart-dialog,.cashier-phone-dialog { background:linear-gradient(155deg,#fff,#f1f8f6); border:1px solid #cadeda; border-radius:14px; box-shadow:0 24px 80px rgba(0,0,0,.4); color:#20373d; margin:auto; max-width:440px; padding:22px; width:calc(100% - 28px); }
         .clear-cart-dialog::backdrop,.cashier-phone-dialog::backdrop { background:rgba(2,8,15,.74); backdrop-filter:blur(4px); }
         .clear-cart-dialog h2,.cashier-phone-dialog h2 { color:#20373d; font-size:1.2rem; margin:0; }
@@ -1470,6 +1495,8 @@
         .payment-dialog-breakdown { display:grid; gap:4px; margin:8px 1px 3px; }
         .payment-dialog-breakdown>div { color:#60777a; display:flex; font-size:.73rem; justify-content:space-between; }
         .payment-dialog-breakdown strong { color:#32494d; font-variant-numeric:tabular-nums; }
+        .payment-empty-message { background:#fff8e6; border:1px solid #ecd7a4; border-radius:7px; color:#765b21; font-size:.78rem; margin:9px 0 0; padding:9px 11px; }
+        .payment-empty-message[hidden] { display:none; }
         .payment-error { background:#fff1f0; border:1px solid #f0c2bd; border-radius:6px; color:#9f302a; font-size:.74rem; margin:8px 0 0; padding:8px; }
         .payment-error[hidden] { display:none; }
         .payment-dialog .payment-section { border:0; margin-top:0; padding-top:14px; }

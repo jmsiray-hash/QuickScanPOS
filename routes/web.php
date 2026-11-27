@@ -47,6 +47,7 @@ Route::middleware('auth')->group(function(){
  Route::get('/cashier-dashboard/scan-report',[CashierDashboardController::class,'scanReport'])->name('cashier-dashboard.scan-report');
  Route::get('/cashier-dashboard/sales-report',[CashierDashboardController::class,'salesReport'])->name('cashier-dashboard.sales-report');
  Route::get('/customer-activity',[CustomerActivityController::class,'index'])->name('customer-activity.index');
+ Route::get('/ratings',[CustomerActivityController::class,'ratings'])->name('ratings.index');
  Route::get('/customer-activity/{customerCart}',[CustomerActivityController::class,'show'])->name('customer-activity.show');
  Route::get('/customer-activity/{customerCart}/status',[CustomerActivityController::class,'status'])->name('customer-activity.status');
  Route::get('/settings/store',[StoreSettingController::class,'edit'])->name('settings.store.edit');

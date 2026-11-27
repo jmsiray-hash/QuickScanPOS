@@ -261,6 +261,9 @@
                     printButton.disabled = !printerCharacteristic;
                 }
             });
+            if (new URLSearchParams(window.location.search).get('print') === '1') {
+                window.setTimeout(() => window.print(), 300);
+            }
         });
     </script>
 

@@ -55,6 +55,9 @@ class SalesAndInventoryTest extends TestCase
             ->assertSee('52 mm')
             ->assertSee('80 mm')
             ->assertSee('₱15.00');
+        $this->get(route('sales.show', $sale).'?print=1')
+            ->assertOk()
+            ->assertSee("get('print') === '1'", false);
     }
 
     public function test_inventory_can_be_searched_and_filtered_by_stock_level(): void
@@ -86,6 +89,8 @@ class SalesAndInventoryTest extends TestCase
         $this->get(route('cashier-dashboard'))
             ->assertOk()
             ->assertSee('register-code')
+            ->assertSee('cashier-brand-logo', false)
+            ->assertSee('images/quickscanpos-logo.png', false)
             ->assertSee('Scan barcode / QR')
             ->assertSee(route('products.create'), false)
             ->assertSee('Add product')
@@ -157,7 +162,10 @@ class SalesAndInventoryTest extends TestCase
         ->assertSee('Current sale')
         ->assertSee('Apply discount')
         ->assertSee('payment-dialog', false)
-        ->assertSee('open-payment-dialog', false)
+        ->assertSee('id="open-payment-dialog" class="open-payment-button" type="button"', false)
+        ->assertSee('paymentDialog.showModal()', false)
+        ->assertSee('payment-empty-message', false)
+        ->assertSee('print-sale-receipt', false)
         ->assertSee('height:390px; max-height:50vh;')
         ->assertSee('Complete payment')
         ->assertSee('GCash')

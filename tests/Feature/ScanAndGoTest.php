@@ -424,7 +424,9 @@ class ScanAndGoTest extends TestCase
             ->assertOk()
             ->assertSee('PAID — Your checkout is complete.')
             ->assertSee('PAID RECEIPT #${receipt.id}', false)
-            ->assertSee('Rate our service');
+            ->assertSee('Rate our service')
+            ->assertSee('mobile-receipt', false)
+            ->assertSee('renderReceipt(cart.receipt)', false);
         $this->get(route('sales.show', $sale))
             ->assertOk()
             ->assertSee('Green Basket Market')
@@ -438,6 +440,32 @@ class ScanAndGoTest extends TestCase
             ->assertJsonPath('cart.service_feedback', 'Great service');
 
         $this->assertSame('Green Basket Market', StoreSetting::current()->store_name);
+        $this->get(route('ratings.index'))
+            ->assertOk()
+            ->assertSee('Ratings')
+            ->assertSee('Average rating')
+            ->assertSee('5.0/5')
+            ->assertSee('Receipt Shopper')
+            ->assertSee('Great service');
+    }
+
+    public function test_ratings_page_lists_submitted_customer_ratings(): void
+    {
+        CustomerCart::create([
+            'token' => 'CART-RATING-LIST1',
+            'customer_name' => 'Rating Shopper',
+            'status' => 'paid',
+            'expires_at' => now()->addHour(),
+            'service_rating' => 4,
+            'service_feedback' => 'Quick checkout',
+            'rated_at' => now(),
+        ]);
+
+        $this->get(route('ratings.index'))
+            ->assertOk()
+            ->assertSee('Rating Shopper')
+            ->assertSee('Quick checkout')
+            ->assertSee('4.0/5');
     }
 
     public function test_admin_login_email_change_requires_password_and_sends_verification(): void
