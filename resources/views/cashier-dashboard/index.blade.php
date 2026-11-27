@@ -140,11 +140,6 @@
                             <span class="report-live-indicator"><i></i> Live report</span>
                         </div>
                     </div>
-                    <section id="customer-qr-camera" class="customer-qr-camera" aria-label="Customer QR scanner" hidden>
-                        <div id="customer-qr-reader"></div>
-                        <p id="customer-qr-status" role="status" aria-live="polite">Point the camera at the customer's checkout QR code.</p>
-                        <button id="stop-customer-qr" class="scan-customer-qr-button scan-customer-qr-close" type="button">Close camera</button>
-                    </section>
                     <div class="scan-report-summary">
                         <div><span>Scans today</span><strong id="report-today-total">{{ $todayScanCount }}</strong></div>
                         <div><span>Showing latest</span><strong>20 <small>events</small></strong></div>
@@ -265,6 +260,22 @@
                 <button id="close-sale-dialog" class="cashier-primary-button" type="button">Continue</button>
             </div>
         </dialog>
+        <dialog id="customer-qr-dialog" class="customer-qr-dialog" aria-labelledby="customer-qr-title">
+            <header class="customer-qr-dialog-header">
+                <div>
+                    <p class="cashier-kicker">CUSTOMER CHECKOUT</p>
+                    <h2 id="customer-qr-title">Scan customer QR</h2>
+                    <p>Hold the customer's checkout QR in front of the camera.</p>
+                </div>
+                <button id="stop-customer-qr" class="customer-qr-dialog-close" type="button" aria-label="Close scanner">×</button>
+            </header>
+            <div class="customer-qr-viewfinder">
+                <div id="customer-qr-reader"></div>
+                <div class="customer-qr-frame" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+            </div>
+            <p id="customer-qr-status" class="customer-qr-status" role="status" aria-live="polite">Starting camera…</p>
+            <p class="customer-qr-hint">Camera access requires HTTPS or localhost.</p>
+        </dialog>
     </section>
 
     <script src="https://unpkg.com/html5-qrcode"></script>
@@ -279,7 +290,7 @@
             const scanReportUrl = @json(route('cashier-dashboard.scan-report'));
             const salesReportUrl = @json(route('cashier-dashboard.sales-report'));
             const customerQrReader = document.getElementById('customer-qr-reader');
-            const customerQrCamera = document.getElementById('customer-qr-camera');
+            const customerQrDialog = document.getElementById('customer-qr-dialog');
             const customerQrStatus = document.getElementById('customer-qr-status');
             let customerQrScanner = null;
             let customerQrScanInProgress = false;
@@ -357,7 +368,7 @@
                         return false;
                     }
                 }
-                customerQrCamera.hidden = true;
+                if (customerQrDialog.open) customerQrDialog.close();
                 return true;
             }
             async function acceptCustomerQr(code) {
@@ -385,6 +396,7 @@
                 }
             }
             document.getElementById('scan-customer-qr').addEventListener('click', async () => {
+                if (customerQrDialog.open) return;
                 if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
                     inform('Camera access requires HTTPS. Open this page using the forwarded HTTPS URL or localhost.', true);
                     return;
@@ -393,9 +405,9 @@
                     inform('Customer QR scanner could not load. Refresh the page or enter the customer cart code in POS Checkout.', true);
                     return;
                 }
-                customerQrCamera.hidden = false;
                 customerQrStatus.textContent = "Point the camera at the customer's checkout QR code.";
                 try {
+                    customerQrDialog.showModal();
                     customerQrScanner = new Html5Qrcode(customerQrReader.id || 'customer-qr-reader');
                     await customerQrScanner.start(
                         { facingMode: 'environment' },
@@ -421,6 +433,13 @@
             });
             document.getElementById('stop-customer-qr').addEventListener('click', () => {
                 stopCustomerQrCamera();
+            });
+            customerQrDialog.addEventListener('cancel', event => {
+                event.preventDefault();
+                stopCustomerQrCamera();
+            });
+            customerQrDialog.addEventListener('click', event => {
+                if (event.target === customerQrDialog) stopCustomerQrCamera();
             });
             window.addEventListener('pagehide', () => {
                 if (customerQrScanner) customerQrScanner.stop();
@@ -909,12 +928,28 @@
         .scan-customer-qr-button { background:#0d605a; border:1px solid #168b7d; border-radius:7px; color:#d5fff3; cursor:pointer; font:inherit; font-size:.63rem; font-weight:700; padding:7px 10px; }
         .scan-customer-qr-button:hover { background:#11756b; }
         .scan-customer-qr-button:disabled { cursor:wait; opacity:.65; }
-        .customer-qr-camera { background:#10212c; border:1px solid #294352; border-radius:9px; flex:none; margin:0 0 9px; padding:10px; }
-        .customer-qr-camera[hidden] { display:none; }
-        #customer-qr-reader { margin:auto; max-width:540px; width:100%; }
-        #customer-qr-reader video { height:auto !important; max-width:100% !important; width:100% !important; }
-        .customer-qr-camera p { color:#9cb0bc; font-size:.65rem; margin:6px 0; text-align:center; }
-        .scan-customer-qr-close { display:block; margin:0 auto; }
+        .customer-qr-dialog { background:linear-gradient(155deg,#152a38,#0c1722); border:1px solid #315164; border-radius:16px; box-shadow:0 24px 80px rgba(0,0,0,.5); color:#e7eef6; margin:auto; max-height:calc(100vh - 32px); max-width:880px; overflow:auto; padding:20px; width:calc(100% - 32px); }
+        @supports (height:100dvh) { .customer-qr-dialog { max-height:calc(100dvh - 32px); } }
+        .customer-qr-dialog[open] { animation:customer-qr-dialog-in .18s ease-out; }
+        .customer-qr-dialog::backdrop { background:rgba(2,8,15,.78); backdrop-filter:blur(5px); }
+        .customer-qr-dialog-header { align-items:flex-start; display:flex; justify-content:space-between; margin-bottom:16px; }
+        .customer-qr-dialog-header h2 { color:#f4fafb; font-size:1.35rem; margin:0; }
+        .customer-qr-dialog-header p:not(.cashier-kicker) { color:#9cb0bc; font-size:.78rem; margin:4px 0 0; }
+        .customer-qr-dialog-close { align-items:center; background:#1b303d; border:1px solid #385366; border-radius:8px; color:#dce9ef; cursor:pointer; display:flex; font:inherit; font-size:1.5rem; height:38px; justify-content:center; line-height:1; width:38px; }
+        .customer-qr-dialog-close:hover { background:#284252; }
+        .customer-qr-viewfinder { background:#050b10; border:1px solid #345365; border-radius:12px; min-height:200px; overflow:hidden; position:relative; }
+        #customer-qr-reader { margin:auto; max-width:100%; width:100%; }
+        #customer-qr-reader video { height:auto !important; max-height:62vh !important; max-width:100% !important; object-fit:contain; width:100% !important; }
+        .customer-qr-viewfinder #customer-qr-reader__dashboard { display:none !important; }
+        .customer-qr-frame { border:0; height:min(64%,360px); left:50%; pointer-events:none; position:absolute; top:50%; transform:translate(-50%,-50%); width:min(64%,360px); }
+        .customer-qr-frame i { border-color:#74f1d2; border-style:solid; height:25px; position:absolute; width:25px; }
+        .customer-qr-frame i:nth-child(1) { border-width:3px 0 0 3px; left:0; top:0; }
+        .customer-qr-frame i:nth-child(2) { border-width:3px 3px 0 0; right:0; top:0; }
+        .customer-qr-frame i:nth-child(3) { border-width:0 0 3px 3px; bottom:0; left:0; }
+        .customer-qr-frame i:nth-child(4) { border-width:0 3px 3px 0; bottom:0; right:0; }
+        .customer-qr-status { color:#d8e8ed; font-size:.82rem; margin:14px 0 0; text-align:center; }
+        .customer-qr-hint { color:#8299a7; font-size:.68rem; margin:5px 0 0; text-align:center; }
+        @keyframes customer-qr-dialog-in { from { opacity:0; transform:translateY(8px) scale(.98); } to { opacity:1; transform:translateY(0) scale(1); } }
         .report-live-indicator { align-items:center; background:#0d302d; border:1px solid #1a5d53; border-radius:999px; color:#9cebd5; display:inline-flex; font-size:.62rem; gap:6px; padding:5px 9px; }
         .report-live-indicator i { background:#43d6a5; border-radius:50%; box-shadow:0 0 10px rgba(67,214,165,.65); height:6px; width:6px; }
         .scan-report-summary { align-items:center; background:linear-gradient(105deg,#132a35,#11232e); border:1px solid #294352; border-radius:9px; display:flex; flex:none; gap:28px; margin:0 0 9px; padding:8px 11px; }
@@ -1033,6 +1068,9 @@
             .sales-transaction-row { grid-template-columns:31px minmax(0,1fr) auto 60px 24px; }
             .sales-method { display:none; }
             .scan-report-actions { align-items:flex-end; flex-direction:column-reverse; }
+            .customer-qr-dialog { padding:15px; }
+            #customer-qr-reader video { max-height:58vh !important; }
+            .customer-qr-frame { height:58%; width:72%; }
         }
         @media(prefers-reduced-motion:reduce) {
             .catalog-product,.catalog-view-tab,.report-quick-link { transition:none; }

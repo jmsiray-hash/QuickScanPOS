@@ -239,6 +239,8 @@ class SalesAndInventoryTest extends TestCase
             ->assertSee('Cashier dashboard')
             ->assertSee('Customer QR report')
             ->assertSee('Scan Customer QR')
+            ->assertSee('customer-qr-dialog', false)
+            ->assertSee('customerQrDialog.showModal()')
             ->assertSee('customer-qr-reader', false)
             ->assertSee('formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE]')
             ->assertSee('Dashboard Shopper')
