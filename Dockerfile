@@ -15,7 +15,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libzip-dev \
     unzip \
     && docker-php-ext-install intl pdo_mysql zip \
-    && a2enmod rewrite \
+    && a2enmod rewrite deflate expires headers \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /var/www/html

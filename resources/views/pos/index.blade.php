@@ -174,6 +174,7 @@
             let currentCustomerName = null;
             let pollTimer = null;
             let polledStatusUrl = null;
+            let statusRefreshInProgress = false;
             let selectedCustomerId = null;
             let discountIdType = null;
             let manualSearchTimer = null;
@@ -612,6 +613,8 @@
                 if (statusUrl && !pollTimer) {
                     polledStatusUrl = statusUrl;
                     pollTimer = window.setInterval(async () => {
+                        if (document.visibilityState !== 'visible' || statusRefreshInProgress) return;
+                        statusRefreshInProgress = true;
                         try {
                             const status = await request(statusUrl);
                             isVerified = status.is_verified;
@@ -623,8 +626,10 @@
                             window.clearInterval(pollTimer);
                             pollTimer = null;
                             polledStatusUrl = null;
+                        } finally {
+                            statusRefreshInProgress = false;
                         }
-                    }, 2000);
+                    }, 1000);
                 }
             }
 

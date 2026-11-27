@@ -60,7 +60,10 @@
             }
             render(@json($cartData));
             if (!['paid', 'expired'].includes(@json($cart->status))) {
+                let statusRefreshInProgress = false;
                 window.setInterval(async () => {
+                    if (document.visibilityState !== 'visible' || statusRefreshInProgress) return;
+                    statusRefreshInProgress = true;
                     try {
                         const response = await fetch(statusUrl, { headers: { Accept: 'application/json' } });
                         if (!response.ok) return;
@@ -69,8 +72,10 @@
                         if (['paid', 'expired'].includes(result.cart.status)) window.location.reload();
                     } catch (error) {
                         console.error('Could not refresh customer cart status.', error);
+                    } finally {
+                        statusRefreshInProgress = false;
                     }
-                }, 4000);
+                }, 1000);
             }
         });
     </script>

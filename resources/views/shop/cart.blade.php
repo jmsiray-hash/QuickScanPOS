@@ -96,9 +96,9 @@
                 return result;
             };
 
-            const schedulePoll = () => {
+            const schedulePoll = (delay = 750) => {
                 if (pollTimer) window.clearTimeout(pollTimer);
-                if (!['ready_for_checkout', 'verified_ready'].includes(cart.status)) return;
+                if (document.visibilityState !== 'visible' || !['ready_for_checkout', 'verified_ready'].includes(cart.status)) return;
                 pollTimer = window.setTimeout(async () => {
                     try {
                         const result = await send(statusUrl, 'GET');
@@ -107,10 +107,12 @@
                             render();
                         }
                     } catch (error) {
-                        schedulePoll();
+                        console.error('Could not refresh Scan & Go cart status.', error);
+                        schedulePoll(3000);
                     }
-                }, 5000);
+                }, delay);
             };
+            document.addEventListener('visibilitychange', () => schedulePoll());
 
             function renderRating() {
                 const paid = cart.status === 'paid';

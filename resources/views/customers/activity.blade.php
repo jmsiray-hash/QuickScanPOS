@@ -31,7 +31,10 @@
     </div>
     {{ $carts->links() }}
     <script>
+        let activityRefreshInProgress = false;
         window.setInterval(async () => {
+            if (document.visibilityState !== 'visible' || activityRefreshInProgress) return;
+            activityRefreshInProgress = true;
             try {
                 const response = await fetch(window.location.href, { headers: { Accept: 'text/html' } });
                 if (!response.ok) return;
@@ -41,7 +44,9 @@
                 if (nextRows) document.getElementById('customer-cart-list').innerHTML = nextRows.innerHTML;
             } catch (error) {
                 console.error('Could not refresh Scan & Go customer activity.', error);
+            } finally {
+                activityRefreshInProgress = false;
             }
-        }, 5000);
+        }, 1000);
     </script>
 @endsection

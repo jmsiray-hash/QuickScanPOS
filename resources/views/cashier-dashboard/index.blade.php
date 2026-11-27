@@ -347,6 +347,9 @@
             let lastCustomerQrCode = '';
             let lastCustomerQrAt = 0;
             let scanReports = @json($scanReports);
+            let activeCashierView = 'catalog';
+            let reportPollTimer = null;
+            let reportPollInProgress = false;
             let cart = null;
             let orderStarted = false;
             let paymentMethod = 'cash';
@@ -435,9 +438,7 @@
                     await stopCustomerQrCamera();
                     customerQrStatus.textContent = 'Customer cart loaded.';
                     inform('Loaded customer cart for ' + (result.customer_name || 'customer') + '. Review the cart and complete payment when ready.');
-                    refreshScanReport().catch(() => {
-                        document.getElementById('report-refresh-status').textContent = 'Unable to refresh the scan report';
-                    });
+                    if (activeCashierView === 'scan-report') refreshActiveReport();
                 } catch (error) {
                     customerQrStatus.textContent = error.message || 'Could not load this customer QR. Try again.';
                     inform(customerQrStatus.textContent, true);
@@ -532,7 +533,31 @@
                     throw error;
                 }
             }
+            async function refreshActiveReport() {
+                if (reportPollInProgress || !['scan-report', 'sales-report'].includes(activeCashierView)) return;
+                reportPollInProgress = true;
+                try {
+                    if (activeCashierView === 'scan-report') await refreshScanReport();
+                    else await refreshSalesReport();
+                } catch (error) {
+                    if (activeCashierView === 'scan-report') {
+                        document.getElementById('report-refresh-status').textContent = 'Unable to refresh the scan report';
+                    }
+                } finally {
+                    reportPollInProgress = false;
+                }
+            }
+            function scheduleReportRefresh() {
+                if (reportPollTimer) window.clearTimeout(reportPollTimer);
+                if (document.visibilityState !== 'visible' || !['scan-report', 'sales-report'].includes(activeCashierView)) return;
+                reportPollTimer = window.setTimeout(async () => {
+                    reportPollTimer = null;
+                    await refreshActiveReport();
+                    scheduleReportRefresh();
+                }, 1000);
+            }
             function showCashierView(viewName) {
+                activeCashierView = viewName;
                 const showReport = viewName === 'scan-report';
                 const showSales = viewName === 'sales-report';
                 document.getElementById('catalog-view').hidden = showReport || showSales;
@@ -546,12 +571,8 @@
                 document.querySelectorAll('.tray-action[data-cashier-view]').forEach(button => {
                     button.classList.toggle('is-selected', button.dataset.cashierView === viewName);
                 });
-                if (showReport) {
-                    refreshScanReport().catch(() => {
-                        document.getElementById('report-refresh-status').textContent = 'Unable to refresh the scan report';
-                    });
-                }
-                if (showSales) refreshSalesReport().catch(() => {});
+                if (showReport || showSales) refreshActiveReport();
+                scheduleReportRefresh();
             }
             function paymentTotals() {
                 if (!cart) return { total: 0, discount: 0, tax: 0 };
@@ -849,18 +870,13 @@
             }
             updateClock();
             window.setInterval(updateClock, 30000);
-            document.getElementById('refresh-sales-report').addEventListener('click', () => refreshSalesReport().catch(() => {}));
-            document.getElementById('sales-report-date').addEventListener('change', () => refreshSalesReport().catch(() => {}));
+            document.getElementById('refresh-sales-report').addEventListener('click', () => refreshActiveReport());
+            document.getElementById('sales-report-date').addEventListener('change', () => refreshActiveReport());
             renderScanReports(scanReports, {{ $todayScanCount }});
-            refreshSalesReport().catch(() => {});
-            window.setInterval(() => {
-                if (document.visibilityState === 'visible') {
-                    refreshScanReport().catch(() => {
-                        document.getElementById('report-refresh-status').textContent = 'Unable to refresh the scan report';
-                    });
-                    refreshSalesReport().catch(() => {});
-                }
-            }, 15000);
+            document.addEventListener('visibilitychange', scheduleReportRefresh);
+            window.addEventListener('pagehide', () => {
+                if (reportPollTimer) window.clearTimeout(reportPollTimer);
+            });
             refreshCart().catch(error => inform(error.message, true));
         });
     </script>
@@ -868,13 +884,14 @@
     <style>
         body.cashier-app-body { background:radial-gradient(ellipse at 18% -10%,rgba(13,148,136,.18),transparent 42%),#08121c; color:#e7eef6; height:100vh; min-height:0; overflow:hidden; }
         @supports (height:100dvh) { body.cashier-app-body { height:100dvh; } }
-        .cashier-app-shell { height:100vh; max-width:none; overflow:hidden; padding:0 22px 14px; }
+        @supports (height:100dvh) { .cashier-app-shell .site-content { height:100dvh; } }
+        .cashier-app-shell { height:100vh; max-width:none; overflow:hidden; padding:0; }
+        .cashier-app-shell .site-content { height:100vh; min-height:0; overflow:hidden; padding:8px 14px 14px; }
         @supports (height:100dvh) { .cashier-app-shell { height:100dvh; } }
         .cashier-back-button { align-items:center; background:linear-gradient(135deg,#182b39,#11212d); border:1px solid #294253; border-radius:9px; color:#e7eef6; display:inline-flex; flex:none; height:34px; justify-content:center; text-decoration:none; width:36px; }
         .cashier-back-button:hover,.cashier-back-button:focus { background:#263b4e; border-color:#14b8a6; }
         .cashier-back-button svg { fill:none; height:20px; stroke:#5eead4; stroke-linecap:round; stroke-linejoin:round; stroke-width:2; width:20px; }
-        .cashier-app-main { background:transparent; border:0; border-radius:0; display:flex; flex-direction:column; height:calc(100vh - 14px); min-height:0; overflow:hidden; padding:0; }
-        @supports (height:100dvh) { .cashier-app-main { height:calc(100dvh - 14px); } }
+        .cashier-app-main { background:transparent; border:0; border-radius:0; display:flex; flex:1; flex-direction:column; height:100%; min-height:0; overflow:hidden; padding:0; }
         .cashier-app-main > .alert { flex:none; margin:0 0 6px; padding:6px 10px; }
         .cashier-app .button { font:inherit; }
         .cashier-app .pagination { color:#d5e0e9; margin-top:14px; }
@@ -1161,7 +1178,8 @@
         }
         @media(max-width:740px) {
             body.cashier-app-body { height:auto; min-height:100vh; overflow:auto; }
-            .cashier-app-shell { height:auto; min-height:100vh; overflow:visible; padding:0 12px 16px; }
+            .cashier-app-shell { height:auto; min-height:100vh; overflow:visible; padding:0; }
+            .cashier-app-shell .site-content { height:auto; min-height:calc(100vh - 130px); overflow:visible; padding:12px; }
             .cashier-app-main { height:auto; min-height:calc(100vh - 54px); overflow:visible; }
             .cashier-app { min-height:calc(100vh - 54px); }
             .cashier-workspace { flex:none; grid-template-columns:1fr; }

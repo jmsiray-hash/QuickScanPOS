@@ -31,6 +31,7 @@
             let cart = @json($cartData);
             let previousChecks = JSON.stringify(cart.items.map(item => [item.product_id, item.qty, item.checked_qty]));
             let statusTimer = null;
+            let statusRefreshInProgress = false;
             const body = document.getElementById('verify-items');
             const summary = document.getElementById('verify-summary');
             const message = document.getElementById('verify-message');
@@ -107,14 +108,18 @@
             document.querySelector('.scanner-input').focus();
             render();
             statusTimer = window.setInterval(async () => {
+                if (document.visibilityState !== 'visible' || statusRefreshInProgress) return;
+                statusRefreshInProgress = true;
                 try {
                     await refreshCart();
                 } catch (error) {
                     message.textContent = error.message || 'Could not refresh the cashier cart.';
                     message.className = 'alert alert-errors';
                     message.hidden = false;
+                } finally {
+                    statusRefreshInProgress = false;
                 }
-            }, 2000);
+            }, 1000);
             window.addEventListener('pagehide', () => {
                 if (statusTimer) window.clearInterval(statusTimer);
             });

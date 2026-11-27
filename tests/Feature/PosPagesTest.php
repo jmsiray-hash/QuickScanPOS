@@ -23,6 +23,16 @@ class PosPagesTest extends TestCase
         $this->get('/about')->assertOk()->assertSee('About the workspace');
     }
 
+    public function test_cashier_dashboard_navigation_is_not_highlighted_on_other_pages(): void
+    {
+        $this->get(route('pos.index'))
+            ->assertOk()
+            ->assertDontSee(
+                'href="'.route('cashier-dashboard').'" aria-current="page"',
+                false,
+            );
+    }
+
     public function test_customer_page_displays_database_records(): void
     {
         Customer::create([
