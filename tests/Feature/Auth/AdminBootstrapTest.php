@@ -55,4 +55,64 @@ class AdminBootstrapTest extends TestCase
         $this->assertTrue(password_verify('Temporary-Secure-Pass-2026', $staff->password));
         $this->assertDatabaseCount('users', 1);
     }
+
+    public function test_login_links_to_local_first_admin_setup(): void
+    {
+        $this->get(route('login'))
+            ->assertOk()
+            ->assertSee(route('admin.setup'), false)
+            ->assertSee('Create the first admin account');
+    }
+
+    public function test_first_admin_can_be_created_from_local_login_setup(): void
+    {
+        $this->post(route('admin.setup.store'), [
+            'full_name' => 'Store Owner',
+            'email' => 'owner@gmail.com',
+            'password' => 'Temporary-Secure-Pass-2026',
+            'password_confirmation' => 'Temporary-Secure-Pass-2026',
+        ])->assertRedirect(route('login'))
+            ->assertSessionHas('status');
+
+        $admin = User::query()->where('email', 'owner@gmail.com')->firstOrFail();
+        $this->assertSame('admin', $admin->role);
+        $this->assertTrue(password_verify('Temporary-Secure-Pass-2026', $admin->password));
+
+        $this->get(route('admin.setup'))
+            ->assertRedirect(route('login'));
+    }
+
+    public function test_first_admin_setup_can_promote_an_existing_staff_account(): void
+    {
+        $staff = User::factory()->create([
+            'email' => 'staff@gmail.com',
+            'role' => 'cashier',
+        ]);
+
+        $this->post(route('admin.setup.store'), [
+            'full_name' => 'Store Owner',
+            'email' => 'staff@gmail.com',
+            'password' => 'Temporary-Secure-Pass-2026',
+            'password_confirmation' => 'Temporary-Secure-Pass-2026',
+        ])->assertRedirect(route('login'));
+
+        $this->assertSame('admin', $staff->fresh()->role);
+        $this->assertTrue(password_verify('Temporary-Secure-Pass-2026', $staff->fresh()->password));
+    }
+
+    public function test_first_admin_setup_is_not_available_outside_localhost_or_local_environment(): void
+    {
+        $this->withServerVariables(['REMOTE_ADDR' => '192.0.2.10'])
+            ->get(route('admin.setup'))
+            ->assertNotFound();
+
+        $this->withServerVariables(['REMOTE_ADDR' => '127.0.0.1'])
+            ->post(route('admin.setup.store'), [])
+            ->assertSessionHasErrors(['full_name', 'email', 'password']);
+
+        $this->app['env'] = 'production';
+        $this->withServerVariables(['REMOTE_ADDR' => '127.0.0.1'])
+            ->get(route('admin.setup'))
+            ->assertNotFound();
+    }
 }

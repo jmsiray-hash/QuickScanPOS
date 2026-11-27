@@ -54,6 +54,10 @@
         </div>
     </form>
 
+    @if (app()->environment(['local', 'testing']))
+        <p class="login-admin-setup"><a href="{{ route('admin.setup') }}">Create the first admin account</a><small>Available only on this computer and only before the first admin is created.</small></p>
+    @endif
+
     <style>
         .login-choice-label { color:#334155; font-size:.88rem; font-weight:700; margin:18px 0 8px; }
         .login-choice-actions { display:grid; gap:9px; grid-template-columns:repeat(2,minmax(0,1fr)); }
@@ -67,6 +71,9 @@
         .login-choice-admin { background:#eff6ff; border-color:#bfdbfe; color:#1e4777; }
         .login-choice-admin:hover { background:#e1efff; border-color:#70a9e8; }
         .login-forgot-link { color:#475569; display:block; font-size:.82rem; margin-top:12px; text-align:right; text-decoration:underline; }
+        .login-admin-setup { border-top:1px solid #e2e8f0; display:grid; gap:4px; margin:18px 0 0; padding-top:14px; text-align:center; }
+        .login-admin-setup a { color:#475569; font-size:.8rem; font-weight:700; text-decoration:underline; }
+        .login-admin-setup small { color:#64748b; font-size:.69rem; }
         @media(max-width:420px) { .login-choice-actions { grid-template-columns:1fr; } }
     </style>
 </x-guest-layout>
