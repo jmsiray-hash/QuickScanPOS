@@ -100,7 +100,9 @@ class SalesController extends Controller
             return $shift;
         });
 
-        return to_route('sales.index')->with('status', 'Shift closed. Expected cash: ₱'.number_format((float) $shift->expected_cash, 2).'; over/short: ₱'.number_format((float) $shift->cash_over_short, 2).'.');
+        $destination = $request->boolean('cashier_dashboard') ? 'cashier-dashboard' : 'sales.index';
+
+        return to_route($destination)->with('status', 'Shift closed. Expected cash: ₱'.number_format((float) $shift->expected_cash, 2).'; over/short: ₱'.number_format((float) $shift->cash_over_short, 2).'.');
     }
 
     public function void(Request $request, Sale $sale): RedirectResponse

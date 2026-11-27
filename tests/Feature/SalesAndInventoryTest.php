@@ -405,6 +405,51 @@ class SalesAndInventoryTest extends TestCase
         ]);
     }
 
+    public function test_cashier_dashboard_can_end_a_shift_and_open_a_new_one(): void
+    {
+        $cashier = auth()->user();
+        $shift = CashierShift::create([
+            'user_id' => $cashier->id,
+            'opening_cash' => 100,
+            'opened_at' => now(),
+        ]);
+
+        $this->get(route('cashier-dashboard'))
+            ->assertOk()
+            ->assertSee('End Shift')
+            ->assertSee('end-shift-dialog', false)
+            ->assertSee('End Shift &amp; Save Z-Reading', false);
+
+        $this->post(route('sales.shift.close'), [
+            'actual_cash' => 100,
+            'cashier_dashboard' => 1,
+        ])
+            ->assertRedirect(route('cashier-dashboard'))
+            ->assertSessionHas('status');
+
+        $this->assertDatabaseHas('cashier_shifts', [
+            'id' => $shift->id,
+            'status' => 'closed',
+            'actual_cash' => 100,
+        ]);
+
+        $this->get(route('cashier-dashboard'))
+            ->assertOk()
+            ->assertSee('SHIFT NOT OPEN')
+            ->assertSee('Open your cashier shift');
+
+        $this->post(route('pos.shift.open'), [
+            'opening_cash' => 50,
+            'cashier_dashboard' => 1,
+        ])->assertRedirect(route('cashier-dashboard'));
+
+        $this->assertDatabaseHas('cashier_shifts', [
+            'user_id' => $cashier->id,
+            'status' => 'open',
+            'opening_cash' => 50,
+        ]);
+    }
+
     public function test_checkout_records_editable_promo_price_on_receipt(): void
     {
         $cashier = auth()->user();
