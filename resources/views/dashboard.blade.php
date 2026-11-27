@@ -67,24 +67,38 @@
     </section>
 
     <style>
-        .dashboard-heading { margin-bottom:28px; }
+        .dashboard-main { display:flex; flex-direction:column; min-height:0; }
+        .dashboard-heading { flex:none; margin-bottom:18px; }
         .dashboard-heading .eyebrow { color:var(--brand); }
-        .dashboard-heading h1 { font-size:clamp(2rem,4vw,2.7rem); }
+        .dashboard-heading h1 { font-size:clamp(1.8rem,3vw,2.5rem); margin-bottom:8px; }
         .dashboard-heading p:last-child { color:var(--muted); }
-        .dashboard-stock-alert { background:#fffbeb; border:1px solid #fcd34d; border-radius:10px; display:grid; gap:10px; grid-template-columns:1fr 2fr auto; margin:0 0 24px; padding:16px; }
+        .dashboard-stock-alert { background:#fffbeb; border:1px solid #fcd34d; border-radius:10px; display:grid; gap:10px; grid-template-columns:minmax(150px,1fr) minmax(0,2fr) auto; margin:0 0 14px; padding:10px 14px; }
         .dashboard-stock-alert h2 { color:#92400e; font-size:1.15rem; margin:0; }
         .dashboard-stock-alert p { margin:4px 0 0; }
-        .dashboard-stock-alert ul { display:flex; flex-wrap:wrap; gap:6px 18px; list-style:none; margin:0; padding:0; }
+        .dashboard-stock-alert ul { align-content:center; display:flex; flex-wrap:wrap; gap:4px 14px; list-style:none; margin:0; max-height:48px; overflow-y:auto; padding:0; }
         .dashboard-stock-alert li { color:#78350f; }
-        .dashboard-grid { display:grid; gap:16px; grid-template-columns:repeat(3,minmax(0,1fr)); }
-        .dashboard-card { border:1px solid var(--line); border-radius:10px; color:inherit; display:flex; flex-direction:column; min-height:210px; padding:22px; text-decoration:none; transition:border-color .15s,transform .15s; }
+        .dashboard-grid { display:grid; gap:12px; grid-template-columns:repeat(3,minmax(0,1fr)); }
+        .dashboard-card { border:1px solid var(--line); border-radius:10px; color:inherit; display:flex; flex-direction:column; min-height:0; padding:16px 18px; text-decoration:none; transition:border-color .15s,transform .15s; }
         .dashboard-card:hover,.dashboard-card:focus { border-color:var(--brand); transform:translateY(-2px); }
         .dashboard-card-primary { background:var(--wash); border-color:#99f6e4; }
         .dashboard-card-label { color:var(--brand-dark); font-size:.72rem; font-weight:800; letter-spacing:.12em; }
-        .dashboard-card h2 { font-size:1.2rem; margin:14px 0 4px; }
-        .dashboard-card p { color:var(--muted); margin:0 0 16px; }
+        .dashboard-card h2 { font-size:1.1rem; line-height:1.25; margin:9px 0 4px; }
+        .dashboard-card p { color:var(--muted); font-size:.9rem; line-height:1.4; margin:0 0 10px; }
         .dashboard-card-action { color:var(--brand-dark); font-weight:700; margin-top:auto; }
+        @media(min-width:761px) and (min-height:680px) {
+            body.dashboard-page { height:100vh; min-height:0; overflow:hidden; }
+            .dashboard-page .site-shell { height:100vh; min-height:0; }
+            .dashboard-page .site-content { height:100vh; min-height:0; overflow:hidden; padding:12px 20px; }
+            .dashboard-page .dashboard-main { height:100%; overflow:hidden; padding:20px; }
+            .dashboard-page .site-content>footer { display:none; }
+            .dashboard-heading { margin-bottom:12px; }
+            .dashboard-heading .eyebrow { margin:0 0 5px; }
+            .dashboard-heading h1 { font-size:clamp(1.7rem,2.7vw,2.35rem); margin-bottom:5px; }
+            .dashboard-stock-alert { flex:none; margin-bottom:10px; }
+            .dashboard-grid { flex:1; grid-auto-rows:minmax(0,1fr); min-height:0; }
+            .dashboard-card { padding:clamp(10px,1.3vw,17px); }
+        }
         @media(max-width:760px) { .dashboard-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } .dashboard-stock-alert { grid-template-columns:1fr; } }
-        @media(max-width:520px) { .dashboard-grid { grid-template-columns:1fr; } }
+        @media(max-width:520px) { .dashboard-grid { grid-template-columns:1fr; } .dashboard-card { min-height:150px; } }
     </style>
 @endsection

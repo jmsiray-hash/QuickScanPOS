@@ -51,7 +51,7 @@
         }
     </style>
 </head>
-<body class="{{ request()->routeIs('cashier-dashboard') ? 'cashier-app-body' : '' }}">
+<body class="{{ request()->routeIs('cashier-dashboard') ? 'cashier-app-body' : '' }}{{ request()->routeIs('dashboard') ? ' dashboard-page' : '' }}">
 <div class="site-shell {{ request()->routeIs('cashier-dashboard') ? 'cashier-app-shell' : '' }}">
     <aside class="site-sidebar">
         <a class="sidebar-brand" href="{{ route('home') }}"><span class="sidebar-brand-mark" aria-hidden="true">₱</span>QuickScanPos</a>
@@ -67,12 +67,11 @@
             @auth
                 <a class="{{ request()->routeIs('dashboard') ? 'is-active' : '' }}" href="{{ route('dashboard') }}" @if (request()->routeIs('dashboard')) aria-current="page" @endif><span class="sidebar-nav-icon" aria-hidden="true">▤</span>Dashboard</a>
                 <a class="{{ request()->routeIs('cashier-dashboard', 'pos.index') ? 'is-active' : '' }}" href="{{ route('cashier-dashboard') }}" @if (request()->routeIs('cashier-dashboard', 'pos.index')) aria-current="page" @endif><span class="sidebar-nav-icon" aria-hidden="true">▣</span>QuickScan POS Register</a>
-                <a class="{{ request()->routeIs('products.*') ? 'is-active' : '' }}" href="{{ route('products.index') }}" @if (request()->routeIs('products.*')) aria-current="page" @endif><span class="sidebar-nav-icon" aria-hidden="true">▧</span>Products</a>
                 <a class="{{ request()->routeIs('sales.*') ? 'is-active' : '' }}" href="{{ route('sales.index') }}" @if (request()->routeIs('sales.*')) aria-current="page" @endif><span class="sidebar-nav-icon" aria-hidden="true">₱</span>Sales Reports</a>
                 <a class="{{ request()->routeIs('customers.*') ? 'is-active' : '' }}" href="{{ route('customers.index') }}" @if (request()->routeIs('customers.*')) aria-current="page" @endif><span class="sidebar-nav-icon" aria-hidden="true">♙</span>Customers</a>
                 <a class="{{ request()->routeIs('customer-activity.*') ? 'is-active' : '' }}" href="{{ route('customer-activity.index') }}" @if (request()->routeIs('customer-activity.*')) aria-current="page" @endif><span class="sidebar-nav-icon" aria-hidden="true">◉</span>Scan &amp; Go Customers</a>
                 @if (auth()->user()->isAdmin())
-                    <a class="{{ request()->routeIs('settings.store.*') ? 'is-active' : '' }}" href="{{ route('settings.store.edit') }}" @if (request()->routeIs('settings.store.*')) aria-current="page" @endif><span class="sidebar-nav-icon" aria-hidden="true">⚙</span>Settings</a>
+                    <a class="{{ request()->routeIs('settings.store.*') ? 'is-active' : '' }}" href="{{ route('settings.store.edit') }}" @if (request()->routeIs('settings.store.*')) aria-current="page" @endif><span class="sidebar-nav-icon" aria-hidden="true">⚙</span>Company Settings</a>
                 @endif
                 <a class="{{ request()->routeIs('users.*') ? 'is-active' : '' }}" href="{{ route('users.index') }}" @if (request()->routeIs('users.*')) aria-current="page" @endif><span class="sidebar-nav-icon" aria-hidden="true">♟</span>Users</a>
                 <form action="{{ route('logout') }}" method="POST">@csrf<button class="sidebar-logout" type="submit"><span class="sidebar-nav-icon" aria-hidden="true">↪</span>Log Out</button></form>
@@ -83,7 +82,7 @@
         </nav>
     </aside>
     <div class="site-content">
-    <main class="{{ request()->routeIs('cashier-dashboard') ? 'cashier-app-main' : '' }}">
+    <main class="{{ request()->routeIs('cashier-dashboard') ? 'cashier-app-main' : '' }}{{ request()->routeIs('dashboard') ? ' dashboard-main' : '' }}">
         @unless (request()->routeIs('cashier-dashboard'))
             @if (session('status')) <div class="alert alert-success" role="status">{{ session('status') }}</div> @endif
             @if ($errors->any()) <div class="alert alert-errors" role="alert"><p>Please correct the following errors:</p><ul>@foreach ($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul></div> @endif

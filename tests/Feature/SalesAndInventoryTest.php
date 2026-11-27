@@ -87,6 +87,9 @@ class SalesAndInventoryTest extends TestCase
             ->assertOk()
             ->assertSee('register-code')
             ->assertSee('Scan barcode / QR')
+            ->assertSee(route('products.create'), false)
+            ->assertSee('Add product')
+            ->assertSee('product-stock-ready', false)
             ->assertSee('Connect phone')
             ->assertSee('register-customer-search')
             ->assertSee('line-discount-type');

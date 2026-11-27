@@ -13,6 +13,8 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Notification;
+use Illuminate\Auth\Notifications\VerifyEmail;
 
 class ScanAndGoTest extends TestCase
 {
@@ -44,6 +46,7 @@ class ScanAndGoTest extends TestCase
         $this->get(route('dashboard'))
             ->assertOk()
             ->assertSee('QuickScan POS Register')
+            ->assertDontSee('>Products</a>', false)
             ->assertSee(route('cashier-dashboard'), false)
             ->assertSee(route('products.create'), false)
             ->assertSee(route('products.index'), false)
@@ -388,7 +391,11 @@ class ScanAndGoTest extends TestCase
         $this->actingAs($admin)
             ->get(route('settings.store.edit'))
             ->assertOk()
-            ->assertSee('Company / store name');
+            ->assertSee('Company / store name')
+            ->assertSee('Company & receipt settings')
+            ->assertSee('Admin Gmail / email address')
+            ->assertSee('Receipt preview')
+            ->assertSee('Subtotal, tax & discount');
         $this->put(route('settings.store.update'), [
             'store_name' => 'Green Basket Market',
             'store_address' => "12 Market Road\nQuezon City",
@@ -431,6 +438,43 @@ class ScanAndGoTest extends TestCase
             ->assertJsonPath('cart.service_feedback', 'Great service');
 
         $this->assertSame('Green Basket Market', StoreSetting::current()->store_name);
+    }
+
+    public function test_admin_login_email_change_requires_password_and_sends_verification(): void
+    {
+        $admin = User::factory()->create([
+            'role' => 'admin',
+            'email' => 'old-admin@example.com',
+        ]);
+        Notification::fake();
+
+        $this->actingAs($admin)
+            ->from(route('settings.store.edit'))
+            ->put(route('settings.store.update'), [
+                'store_name' => 'Green Basket Market',
+                'store_address' => '12 Market Road',
+                'admin_email' => 'New.Admin@gmail.com',
+                'current_password' => 'wrong-password',
+            ])
+            ->assertSessionHasErrors('current_password');
+
+        $this->assertSame('old-admin@example.com', $admin->fresh()->email);
+        $this->assertNotNull($admin->fresh()->email_verified_at);
+
+        $this->put(route('settings.store.update'), [
+            'store_name' => 'Green Basket Market',
+            'store_address' => '12 Market Road',
+            'admin_email' => 'New.Admin@gmail.com',
+            'current_password' => 'password',
+        ])
+            ->assertSessionHasNoErrors()
+            ->assertSessionHas('status', 'Company details saved. Verify the new admin email using the link we sent.');
+
+        $admin->refresh();
+        $this->assertSame('new.admin@gmail.com', $admin->email);
+        $this->assertSame('admin', $admin->role);
+        $this->assertNull($admin->email_verified_at);
+        Notification::assertSentTo($admin, VerifyEmail::class);
     }
 
     public function test_staff_customer_activity_lists_cart_and_displays_its_live_items(): void

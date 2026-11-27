@@ -137,7 +137,9 @@
                                 <p class="catalog-code">{{ $product->barcode }}</p>
                                 <div class="catalog-product-bottom">
                                     <strong>₱{{ number_format($product->selling_price, 2) }}</strong>
-                                    <small>{{ $product->stock_quantity }} available</small>
+                                    <small class="{{ $product->stock_quantity <= 5 ? 'product-stock-low' : 'product-stock-ready' }}">
+                                        <span aria-hidden="true"></span>{{ $product->stock_quantity }} {{ $product->stock_quantity === 1 ? 'left' : 'in stock' }}
+                                    </small>
                                 </div>
                                 <button class="add-product-button" type="button" data-product-id="{{ $product->id }}"
                                         data-stock="{{ $product->stock_quantity }}" data-price="{{ $product->selling_price }}">
@@ -259,6 +261,9 @@
             <button type="button" class="tray-action" id="mobile-scan-code">
                 <span aria-hidden="true">⌗</span><span>Scan</span>
             </button>
+            <a class="tray-action tray-action-products" href="{{ route('products.create') }}" aria-label="Register a new product" title="Register a new product">
+                <span aria-hidden="true">＋</span><span>Add product</span>
+            </a>
             <button type="button" class="tray-action" data-cashier-view="sales-report">
                 <span aria-hidden="true">₱</span><span>Today's sales</span>
             </button>
@@ -1349,21 +1354,25 @@
         .category-tabs a { background:#1a2936; border:1px solid #2a3c4c; border-radius:999px; color:#c6d2de; flex:none; font-size:.75rem; padding:6px 10px; text-decoration:none; }
         .category-tabs a:hover,.category-tabs a.selected { background:#0e625b; border-color:#159e8e; color:#effdfa; }
         .product-grid { align-content:start; display:grid; flex:1; gap:12px; grid-auto-rows:max-content; grid-template-columns:repeat(3,minmax(0,1fr)); min-height:0; overflow-y:auto; padding:1px 5px 8px 1px; }
-        .catalog-product { background:linear-gradient(155deg,#fff,#f3f8f8); border:1px solid #d5e0e8; border-radius:9px; box-shadow:0 5px 14px rgba(2,12,22,.12); color:#17212b; min-width:0; overflow:hidden; transition:transform .18s,box-shadow .18s; }
-        .catalog-product:hover { box-shadow:0 11px 22px rgba(2,12,22,.22); transform:translateY(-2px); }
-        .catalog-product-image { align-items:center; background:#e9f0f3; display:flex; height:clamp(82px,13vh,145px); justify-content:center; overflow:hidden; }
-        .catalog-product-image img { height:100%; object-fit:cover; width:100%; }
-        .product-placeholder { align-items:center; background:#ccfbf1; border-radius:50%; color:#115e59; display:flex; font-size:1.6rem; font-weight:800; height:54px; justify-content:center; width:54px; }
-        .catalog-product-details { padding:10px; }
-        .catalog-category { color:#0f766e; font-size:.64rem; font-weight:800; letter-spacing:.06em; text-transform:uppercase; }
-        .eligible-badge { background:#dcfce7; border-radius:999px; color:#166534; display:inline-block; font-size:.6rem; font-weight:700; margin-top:3px; padding:2px 6px; }
-        .catalog-product h2 { color:#18232d; font-size:.9rem; line-height:1.25; margin:3px 0; min-height:1.9em; overflow-wrap:anywhere; }
-        .catalog-code { color:#708090; font-size:.7rem; margin:0; overflow-wrap:anywhere; }
-        .catalog-product-bottom { align-items:baseline; display:flex; flex-wrap:wrap; gap:2px 5px; justify-content:space-between; margin:5px 0; }
-        .catalog-product-bottom strong { color:#0f766e; font-size:.95rem; }
-        .catalog-product-bottom small { color:#697987; font-size:.68rem; }
-        .add-product-button { background:#e2f5ef; border:1px solid #a7e4d1; border-radius:6px; color:#116454; cursor:pointer; font:inherit; font-size:.75rem; font-weight:800; padding:8px; width:100%; }
-        .add-product-button:hover { background:#c9f0e2; }
+        .catalog-product { background:linear-gradient(155deg,#fff,#f6fbfa); border:1px solid #d5e0e8; border-radius:12px; box-shadow:0 5px 14px rgba(2,12,22,.12); color:#17212b; min-width:0; overflow:hidden; transition:border-color .18s,transform .18s,box-shadow .18s; }
+        .catalog-product:hover { border-color:#83cbb9; box-shadow:0 12px 24px rgba(2,12,22,.22); transform:translateY(-2px); }
+        .catalog-product-image { align-items:center; background:radial-gradient(ellipse at 50% 110%,#c9e8e1,#eaf2f3 72%); display:flex; height:clamp(82px,13vh,145px); justify-content:center; overflow:hidden; }
+        .catalog-product-image img { height:100%; object-fit:cover; transition:transform .25s; width:100%; }
+        .catalog-product:hover .catalog-product-image img { transform:scale(1.035); }
+        .product-placeholder { align-items:center; background:linear-gradient(145deg,#d9f8ef,#a8e7d5); border:1px solid #9edbca; border-radius:18px; box-shadow:0 5px 14px rgba(15,118,110,.12); color:#115e59; display:flex; font-size:1.6rem; font-weight:800; height:54px; justify-content:center; width:54px; }
+        .catalog-product-details { padding:10px 11px 11px; }
+        .catalog-category { background:#e8f6f2; border-radius:999px; color:#0f766e; display:inline-block; font-size:.59rem; font-weight:800; letter-spacing:.045em; max-width:100%; overflow:hidden; padding:3px 7px; text-overflow:ellipsis; text-transform:uppercase; white-space:nowrap; }
+        .eligible-badge { background:#dcfce7; border:1px solid #b9e8c8; border-radius:999px; color:#166534; display:inline-block; font-size:.58rem; font-weight:700; margin-top:4px; padding:2px 6px; }
+        .catalog-product h2 { color:#18232d; font-size:.91rem; line-height:1.25; margin:7px 0 3px; min-height:2.2em; overflow-wrap:anywhere; }
+        .catalog-code { color:#85929e; font-size:.64rem; margin:0; overflow-wrap:anywhere; }
+        .catalog-product-bottom { align-items:center; border-top:1px solid #e8efef; display:flex; flex-wrap:wrap; gap:3px 5px; justify-content:space-between; margin:8px 0 7px; padding-top:7px; }
+        .catalog-product-bottom strong { color:#0f766e; font-size:1rem; font-variant-numeric:tabular-nums; }
+        .catalog-product-bottom small { align-items:center; color:#697987; display:inline-flex; font-size:.62rem; gap:5px; }
+        .catalog-product-bottom small span { background:#23a487; border-radius:50%; height:6px; width:6px; }
+        .catalog-product-bottom small.product-stock-low { color:#a45a11; }
+        .catalog-product-bottom small.product-stock-low span { background:#e6a23c; }
+        .add-product-button { background:linear-gradient(105deg,#e1f6ef,#d4f0e6); border:1px solid #a7e4d1; border-radius:7px; color:#116454; cursor:pointer; font:inherit; font-size:.73rem; font-weight:800; padding:8px; transition:background .16s,border-color .16s,transform .16s; width:100%; }
+        .add-product-button:hover { background:linear-gradient(105deg,#c9f0e2,#b8e9d8); border-color:#79ceb3; transform:translateY(-1px); }
         .add-product-button:disabled { cursor:wait; opacity:.65; }
         .catalog-empty { color:#cbd5e1; grid-column:1/-1; padding:24px; }
         .cart-pane { background:linear-gradient(155deg,#fff,#f3f8f7); border-color:#d5e5e3; color:#1e333b; display:flex; flex-direction:column; overflow:hidden; padding:18px; }
@@ -1476,6 +1485,9 @@
         .tray-action-primary { background:linear-gradient(110deg,#16a991,#0e8178); color:#fff; font-weight:800; }
         .tray-action-primary>span:first-child { color:#d5fff3; }
         .tray-action-primary:hover { background:linear-gradient(110deg,#1bbda1,#11958b); border-color:#4ac7ae; }
+        .tray-action-products { color:#c8f4e7; }
+        .tray-action-products>span:first-child { align-items:center; background:#174c47; border-radius:50%; color:#91f0d2; display:inline-flex; height:19px; justify-content:center; width:19px; }
+        .tray-action-products:hover { background:#173c3b; border-color:#27766c; }
         .scan-report-view { display:flex; flex:1; flex-direction:column; min-height:0; overflow:hidden; }
         .scan-report-heading { align-items:center; display:flex; flex:none; justify-content:space-between; padding:5px 4px 10px; }
         .scan-report-heading h2 { color:#f4fafb; font-size:1.15rem; letter-spacing:-.02em; margin:0; }
@@ -1639,6 +1651,8 @@
             .cashier-action-tray { bottom:0; justify-content:space-around; margin:8px -2px 0; position:sticky; z-index:5; }
             .tray-action { flex:1; min-width:0; padding:7px 2px; }
             .tray-action span:last-child { font-size:.57rem; }
+            .tray-action-products { flex:0 0 34px; min-width:34px; }
+            .tray-action-products>span:last-child { display:none; }
             .sales-transaction-row { grid-template-columns:31px minmax(0,1fr) auto 60px 24px; }
             .sales-method { display:none; }
             .scan-report-actions { align-items:flex-end; flex-direction:column-reverse; }
@@ -1647,7 +1661,7 @@
             .customer-qr-frame { height:58%; width:72%; }
         }
         @media(prefers-reduced-motion:reduce) {
-            .catalog-product,.catalog-view-tab,.report-quick-link { transition:none; }
+            .catalog-product,.catalog-product-image img,.add-product-button,.catalog-view-tab,.report-quick-link { transition:none; }
             .catalog-product:hover,.report-quick-link:hover { transform:none; }
         }
     </style>
