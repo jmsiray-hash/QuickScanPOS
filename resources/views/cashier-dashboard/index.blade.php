@@ -221,31 +221,9 @@
                     <small>Discount applies to catalog-eligible items only. PROMO items are excluded.</small>
                 </section>
 
-                <section class="payment-section">
-                    <h3>Payment method</h3>
-                    <div class="payment-options" role="group" aria-label="Payment method">
-                        <button type="button" class="payment-option selected" data-method="cash">Cash</button>
-                        <button type="button" class="payment-option" data-method="gcash">GCash</button>
-                        <button type="button" class="payment-option" data-method="maya">Maya</button>
-                        <button type="button" class="payment-option" data-method="card">Card</button>
-                    </div>
-                    <div id="cash-payment-fields" class="payment-detail">
-                        <label for="cash-received">Cash received (₱)</label>
-                        <input id="cash-received" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00">
-                        <p id="cash-change">Change: ₱0.00</p>
-                    </div>
-                    <div id="wallet-payment-fields" class="payment-detail" hidden>
-                        <label for="payment-reference">Payment reference number</label>
-                        <input id="payment-reference" type="text" maxlength="100" autocomplete="off" placeholder="Enter reference number">
-                    </div>
-                    <button id="complete-sale" class="complete-sale-button" type="button" @disabled(!$activeShift)>
-                        Complete payment · ₱<span id="payment-total">0.00</span>
-                    </button>
-                    @unless ($activeShift)
-                        <p class="shift-required-note">Open your shift to enable payment.</p>
-                    @endunless
-                </section>
-                <p class="cart-footnote">Payments are recorded to your open cashier shift.</p>
+                <button id="open-payment-dialog" class="open-payment-button" type="button" disabled>
+                    <span>Payment</span><strong id="payment-button-total">₱0.00</strong>
+                </button>
             </aside>
         </div>
         <nav class="cashier-action-tray" aria-label="Cashier quick actions">
@@ -274,6 +252,40 @@
                 <a id="sale-receipt-link" class="cashier-secondary-button" href="#">View receipt</a>
                 <button id="close-sale-dialog" class="cashier-primary-button" type="button">Continue</button>
             </div>
+        </dialog>
+        <dialog id="payment-dialog" class="payment-dialog" aria-labelledby="payment-dialog-title">
+            <header class="payment-dialog-header">
+                <div>
+                    <p class="cashier-kicker">CHECKOUT</p>
+                    <h2 id="payment-dialog-title">Choose payment method</h2>
+                </div>
+                <button id="close-payment-dialog" class="payment-dialog-close" type="button" aria-label="Close payment">×</button>
+            </header>
+            <div class="payment-dialog-total"><span>Total due</span><strong id="payment-dialog-total">₱0.00</strong></div>
+            <section class="payment-section">
+                <div class="payment-options" role="group" aria-label="Payment method">
+                    <button type="button" class="payment-option selected" data-method="cash">Cash</button>
+                    <button type="button" class="payment-option" data-method="gcash">GCash</button>
+                    <button type="button" class="payment-option" data-method="maya">Maya</button>
+                    <button type="button" class="payment-option" data-method="card">Card</button>
+                </div>
+                <div id="cash-payment-fields" class="payment-detail">
+                    <label for="cash-received">Cash received (₱)</label>
+                    <input id="cash-received" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00">
+                    <p id="cash-change">Change: ₱0.00</p>
+                </div>
+                <div id="wallet-payment-fields" class="payment-detail" hidden>
+                    <label for="payment-reference">Payment reference number</label>
+                    <input id="payment-reference" type="text" maxlength="100" autocomplete="off" placeholder="Enter reference number">
+                </div>
+                @unless ($activeShift)
+                    <p class="shift-required-note">Open your shift to enable payment.</p>
+                @endunless
+                <button id="complete-sale" class="complete-sale-button" type="button" @disabled(!$activeShift)>
+                    Complete payment · ₱<span id="payment-total">0.00</span>
+                </button>
+                <p class="cart-footnote">Payments are recorded to your open cashier shift.</p>
+            </section>
         </dialog>
         <dialog id="customer-qr-dialog" class="customer-qr-dialog" aria-labelledby="customer-qr-title">
             <header class="customer-qr-dialog-header">
@@ -320,6 +332,8 @@
             const notice = document.getElementById('cashier-notice');
             const cartLines = document.getElementById('cart-lines');
             const emptyState = document.getElementById('cart-empty');
+            const paymentDialog = document.getElementById('payment-dialog');
+            const openPaymentDialogButton = document.getElementById('open-payment-dialog');
             const vatRate = @json((float) config('pos.vat_rate', 0));
             const hasOpenShift = @json($activeShift !== null);
             const scanReportUrl = @json(route('cashier-dashboard.scan-report'));
@@ -568,6 +582,8 @@
                 const discountId = document.getElementById('discount-id').value.trim();
                 const hasEligibleItems = Boolean(cart?.items?.some(item => item.senior_pwd_eligible && !item.is_promo));
                 document.getElementById('payment-total').textContent = due.toFixed(2);
+                document.getElementById('payment-button-total').textContent = money(due);
+                document.getElementById('payment-dialog-total').textContent = money(due);
                 document.getElementById('cash-change').textContent = 'Change: ' + money(Math.max(0, cash - due));
                 const ready = paymentMethod === 'cash'
                     ? cash >= due && due > 0
@@ -575,6 +591,7 @@
                 document.getElementById('complete-sale').disabled =
                     !hasOpenShift || !cart?.items?.length || !ready
                     || (discountType !== '' && (!discountId || !hasEligibleItems)) || submitting;
+                openPaymentDialogButton.disabled = !cart?.items?.length || submitting;
                 document.getElementById('discount-id').disabled = discountType === '' || !hasEligibleItems;
                 document.getElementById('discount-id').placeholder = hasEligibleItems
                     ? 'Enter Senior/PWD ID'
@@ -584,6 +601,7 @@
                 cart = nextCart;
                 const items = cart.items || [];
                 emptyState.hidden = items.length > 0;
+                cartLines.hidden = items.length === 0;
                 cartLines.innerHTML = items.map(item => `
                     <article class="cart-line">
                         <div class="cart-line-main">
@@ -705,6 +723,16 @@
             });
             document.getElementById('cash-received').addEventListener('input', updatePaymentState);
             document.getElementById('payment-reference').addEventListener('input', updatePaymentState);
+            openPaymentDialogButton.addEventListener('click', () => {
+                if (!cart?.items?.length || paymentDialog.open) return;
+                paymentDialog.showModal();
+                if (paymentMethod === 'cash') document.getElementById('cash-received').focus();
+                else if (['gcash', 'maya'].includes(paymentMethod)) document.getElementById('payment-reference').focus();
+            });
+            document.getElementById('close-payment-dialog').addEventListener('click', () => paymentDialog.close());
+            paymentDialog.addEventListener('click', event => {
+                if (event.target === paymentDialog) paymentDialog.close();
+            });
             document.getElementById('complete-sale').addEventListener('click', async () => {
                 if (submitting) return;
                 submitting = true;
@@ -722,6 +750,7 @@
                     renderCart(result.cart);
                     document.getElementById('sale-complete-message').textContent = `Sale #${result.sale_id} · Paid ${money(result.receipt.total)} by ${paymentMethod.toUpperCase()}.`;
                     document.getElementById('sale-receipt-link').href = result.receipt_url;
+                    paymentDialog.close();
                     document.getElementById('sale-complete-dialog').showModal();
                     orderStarted = false;
                     document.getElementById('cash-received').value = '';
@@ -943,28 +972,29 @@
         .cart-heading h2 { align-items:center; color:#1b3038; display:flex; font-size:1.25rem; gap:9px; margin:0; }
         .cart-heading h2 span { align-items:center; background:#e5f2ef; border-radius:50%; color:#087d70; display:inline-flex; font-size:.75rem; height:27px; justify-content:center; width:27px; }
         .text-button { background:transparent; border:0; color:#b44848; cursor:pointer; font:inherit; font-size:.82rem; }
-        .cart-empty { align-items:center; color:#63777d; display:flex; flex:1; flex-direction:column; gap:6px; justify-content:center; min-height:90px; text-align:center; }
+        .cart-empty { align-items:center; color:#63777d; display:flex; flex:0 0 auto; flex-direction:column; gap:6px; justify-content:center; min-height:115px; text-align:center; }
         .cart-empty[hidden] { display:none; }
         .cart-empty span { color:#88aaa4; font-size:2rem; }
         .cart-empty strong { color:#30484e; font-size:.95rem; }
         .cart-empty small { font-size:.82rem; }
-        .cart-lines { flex:1 1 auto; min-height:110px; overflow-y:auto; }
-        .cart-line { align-items:flex-start; background:rgba(239,247,245,.75); border-bottom:1px solid #dce9e7; display:flex; gap:12px; justify-content:space-between; padding:12px 10px; }
+        .cart-lines { flex:0 0 auto; height:390px; max-height:50vh; min-height:140px; overflow-y:auto; }
+        .cart-lines[hidden] { display:none; }
+        .cart-line { align-items:flex-start; background:rgba(239,247,245,.75); border-bottom:1px solid #dce9e7; display:flex; gap:12px; justify-content:space-between; min-height:76px; padding:8px 10px; }
         .cart-line-main { min-width:0; }
-        .cart-line-main>strong { color:#253c43; display:block; font-size:.92rem; overflow-wrap:anywhere; }
-        .cart-line-main>small { color:#71848a; font-size:.74rem; }
-        .cart-line-total { color:#1c3e42; flex:none; font-size:.9rem; }
+        .cart-line-main>strong { color:#253c43; display:block; font-size:.84rem; overflow-wrap:anywhere; }
+        .cart-line-main>small { color:#71848a; font-size:.68rem; }
+        .cart-line-total { color:#1c3e42; flex:none; font-size:.82rem; }
         .promo-badge { background:#fff1c7; border-radius:4px; color:#805b09; font-size:.65rem; padding:2px 5px; }
-        .cart-line-controls { align-items:center; display:flex; gap:8px; margin-top:8px; }
-        .quantity-button { background:#fff; border:1px solid #bdd8d2; border-radius:6px; color:#176d62; cursor:pointer; height:30px; width:32px; }
-        .cart-line-controls>span { color:#233b40; font-size:.82rem; min-width:20px; text-align:center; }
-        .remove-line { background:transparent; border:0; color:#b44848; cursor:pointer; font-size:.72rem; margin-left:4px; }
-        .cart-calculations { border-top:1px solid #d2e1df; flex:none; margin-top:8px; padding-top:8px; }
-        .cart-calculations>div { align-items:center; color:#53686e; display:flex; font-size:.82rem; justify-content:space-between; padding:4px 0; }
+        .cart-line-controls { align-items:center; display:flex; gap:6px; margin-top:5px; }
+        .quantity-button { background:#fff; border:1px solid #bdd8d2; border-radius:5px; color:#176d62; cursor:pointer; height:25px; width:28px; }
+        .cart-line-controls>span { color:#233b40; font-size:.76rem; min-width:18px; text-align:center; }
+        .remove-line { background:transparent; border:0; color:#b44848; cursor:pointer; font-size:.67rem; margin-left:3px; }
+        .cart-calculations { border-top:1px solid #d2e1df; flex:none; margin-top:5px; padding-top:4px; }
+        .cart-calculations>div { align-items:center; color:#53686e; display:flex; font-size:.72rem; justify-content:space-between; padding:2px 0; }
         .cart-calculations strong { color:#293e43; font-variant-numeric:tabular-nums; }
-        .cart-calculations .cart-grand-total { border-top:1px solid #d2e1df; color:#253d42; font-size:1rem; margin-top:6px; padding-top:9px; }
-        .cart-grand-total strong { color:#0b8d7e; font-size:1.3rem; }
-        .discount-trigger { background:#f1f7f6; border:1px solid #d1e0de; border-radius:8px; color:#40565c; cursor:pointer; flex:none; font:inherit; font-size:.82rem; margin-top:9px; padding:10px 12px; text-align:left; width:100%; }
+        .cart-calculations .cart-grand-total { border-top:1px solid #d2e1df; color:#253d42; font-size:.86rem; margin-top:3px; padding-top:5px; }
+        .cart-grand-total strong { color:#0b8d7e; font-size:1.08rem; }
+        .discount-trigger { background:#f1f7f6; border:1px solid #d1e0de; border-radius:8px; color:#40565c; cursor:pointer; flex:none; font:inherit; font-size:.76rem; margin-top:6px; padding:8px 10px; text-align:left; width:100%; }
         .discount-trigger.is-active { border-color:#14a393; color:#087d70; }
         .discount-panel { background:#f6faf9; border:1px solid #d1e0de; border-radius:8px; display:grid; gap:6px; flex:none; margin-top:7px; padding:10px; }
         .discount-panel[hidden] { display:none; }
@@ -980,6 +1010,10 @@
         .payment-detail { display:grid; gap:5px; margin-top:9px; }
         .payment-detail[hidden] { display:none; }
         .payment-detail p { color:#72e6c6; font-size:.75rem; margin:0; text-align:right; }
+        .open-payment-button { align-items:center; background:linear-gradient(105deg,#18b69e,#0d8279); border:1px solid rgba(123,255,222,.18); border-radius:8px; box-shadow:0 7px 18px rgba(7,128,112,.18); color:#fff; cursor:pointer; display:flex; flex:none; font:inherit; font-size:.9rem; font-weight:800; justify-content:space-between; margin-top:9px; padding:11px 13px; width:100%; }
+        .open-payment-button:hover { filter:brightness(1.07); }
+        .open-payment-button:disabled { background:#829895; box-shadow:none; cursor:not-allowed; }
+        .open-payment-button strong { font-size:1.03rem; }
         .complete-sale-button { background:linear-gradient(105deg,#18b69e,#0d8279); border:1px solid rgba(123,255,222,.18); border-radius:8px; box-shadow:0 7px 18px rgba(7,128,112,.18); color:#fff; cursor:pointer; font:inherit; font-size:.9rem; font-weight:800; margin-top:9px; padding:12px; width:100%; }
         .complete-sale-button:hover { filter:brightness(1.07); }
         .complete-sale-button:disabled { background:#415361; cursor:not-allowed; }
@@ -990,6 +1024,19 @@
         .sale-dialog h2 { color:#f8fafc; margin:0; }
         .sale-dialog p { color:#b5c3cf; }
         .sale-dialog-actions { display:flex; gap:10px; justify-content:center; }
+        .payment-dialog { background:linear-gradient(155deg,#fff,#f1f8f6); border:1px solid #cadeda; border-radius:16px; box-shadow:0 24px 80px rgba(0,0,0,.45); color:#20373d; margin:auto; max-width:520px; padding:22px; width:calc(100% - 32px); }
+        .payment-dialog::backdrop { background:rgba(2,8,15,.76); backdrop-filter:blur(5px); }
+        .payment-dialog-header { align-items:flex-start; display:flex; justify-content:space-between; }
+        .payment-dialog-header h2 { color:#20373d; font-size:1.25rem; margin:0; }
+        .payment-dialog-close { align-items:center; background:#e9f1ef; border:1px solid #cbd9d7; border-radius:8px; color:#42585d; cursor:pointer; display:flex; font:inherit; font-size:1.4rem; height:36px; justify-content:center; width:36px; }
+        .payment-dialog-total { align-items:center; background:#eaf5f2; border:1px solid #d3e4e0; border-radius:9px; color:#496166; display:flex; justify-content:space-between; margin-top:16px; padding:12px 14px; }
+        .payment-dialog-total strong { color:#078675; font-size:1.45rem; }
+        .payment-dialog .payment-section { border:0; margin-top:0; padding-top:14px; }
+        .payment-dialog .payment-options { grid-template-columns:repeat(4,minmax(0,1fr)); }
+        .payment-dialog .payment-detail label { color:#40565c; }
+        .payment-dialog .payment-detail input { font:inherit; padding:10px; }
+        .payment-dialog .payment-detail p { color:#078675; }
+        .payment-dialog .shift-required-note,.payment-dialog .cart-footnote { color:#63777d; }
         .cashier-action-tray { align-items:center; background:linear-gradient(100deg,#10212c,#132936); border:1px solid #2b4351; border-radius:10px; box-shadow:0 10px 24px rgba(0,0,0,.2); display:flex; flex:none; gap:6px; justify-content:center; margin-top:9px; padding:5px; }
         .tray-action { align-items:center; background:transparent; border:1px solid transparent; border-radius:7px; color:#aebdc8; cursor:pointer; display:flex; font:inherit; font-size:.65rem; gap:6px; justify-content:center; min-width:105px; padding:6px 10px; text-decoration:none; }
         .tray-action>span:first-child { color:#70deca; font-size:.95rem; }
@@ -1126,7 +1173,7 @@
             .sales-report-controls { flex-wrap:wrap; }
             .product-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
             .cart-pane { min-height:440px; position:static; }
-            .cart-lines { flex:1 1 auto; max-height:320px; min-height:120px; }
+            .cart-lines { flex:0 0 auto; height:390px; max-height:50vh; min-height:120px; }
             .catalog-product-image { height:90px; }
         }
         @media(max-width:520px) {
