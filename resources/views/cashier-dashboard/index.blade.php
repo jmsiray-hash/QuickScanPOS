@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Cashier POS | QuickScanPos')
+@section('title', 'QuickScan POS Register')
 
 @section('content')
     <section class="cashier-app">
@@ -9,8 +9,7 @@
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5m0 0 7 7m-7-7 7-7"/></svg>
             </a>
             <div class="cashier-title-group">
-                <p class="cashier-kicker">QUICKSCAN POS <span>·</span> REGISTER 01</p>
-                <h1>Cashier dashboard</h1>
+                <h1>QuickScan POS Register</h1>
             </div>
             <div class="cashier-topbar-actions">
                 @if ($activeShift)
@@ -885,7 +884,8 @@
         body.cashier-app-body { background:radial-gradient(ellipse at 18% -10%,rgba(13,148,136,.18),transparent 42%),#08121c; color:#e7eef6; height:100vh; min-height:0; overflow:hidden; }
         @supports (height:100dvh) { body.cashier-app-body { height:100dvh; } }
         @supports (height:100dvh) { .cashier-app-shell .site-content { height:100dvh; } }
-        .cashier-app-shell { height:100vh; max-width:none; overflow:hidden; padding:0; }
+        .cashier-app-shell { display:block; height:100vh; max-width:none; overflow:hidden; padding:0; width:100%; }
+        .cashier-app-shell > .site-sidebar,.cashier-app-shell .site-content > footer { display:none; }
         .cashier-app-shell .site-content { height:100vh; min-height:0; overflow:hidden; padding:8px 14px 14px; }
         @supports (height:100dvh) { .cashier-app-shell { height:100dvh; } }
         .cashier-back-button { align-items:center; background:linear-gradient(135deg,#182b39,#11212d); border:1px solid #294253; border-radius:9px; color:#e7eef6; display:inline-flex; flex:none; height:34px; justify-content:center; text-decoration:none; width:36px; }

@@ -142,7 +142,8 @@ class SalesAndInventoryTest extends TestCase
 
         $this->get(route('cashier-dashboard'))
         ->assertOk()
-        ->assertSee('Cashier dashboard')
+        ->assertSee('QuickScan POS Register')
+        ->assertSee('.cashier-app-shell > .site-sidebar,.cashier-app-shell .site-content > footer { display:none; }', false)
         ->assertSee('Start order')
         ->assertSee('.catalog-view-switch { display:none; }', false)
         ->assertSee("Today's sales", false)
@@ -157,7 +158,7 @@ class SalesAndInventoryTest extends TestCase
         ->assertSee('Back to dashboard')
         ->assertSee('<aside class="site-sidebar"', false)
         ->assertSee('<nav aria-label="Primary navigation"', false)
-        ->assertSee('Cashier Dashboard')
+        ->assertSee('QuickScan POS Register')
         ->assertSee('Fruits')
         ->assertSee('Bakery')
         ->assertSee('Green Apple')
@@ -242,7 +243,7 @@ class SalesAndInventoryTest extends TestCase
 
         $this->get(route('cashier-dashboard'))
             ->assertOk()
-            ->assertSee('Cashier dashboard')
+            ->assertSee('QuickScan POS Register')
             ->assertSee('Customer QR report')
             ->assertSee('Scan Customer QR')
             ->assertSee('customer-qr-dialog', false)
