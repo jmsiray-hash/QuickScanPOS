@@ -1,6 +1,10 @@
 <x-guest-layout>
     <div class="mb-4 text-sm text-gray-600">
-        Create the first administrator for this local QuickScanPOS installation. This page is disabled once an admin account exists.
+        @if ($replacingAdmin)
+            This will replace the initial administrator account's email, name, and password. Disable ALLOW_ADMIN_SETUP in your environment after setup.
+        @else
+            Create the first administrator for this QuickScanPOS installation.
+        @endif
     </div>
 
     <form method="POST" action="{{ route('admin.setup.store') }}">

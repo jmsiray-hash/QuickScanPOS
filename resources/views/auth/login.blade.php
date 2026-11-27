@@ -54,8 +54,8 @@
         </div>
     </form>
 
-    @if (app()->environment(['local', 'testing']))
-        <p class="login-admin-setup"><a href="{{ route('admin.setup') }}">Create the first admin account</a><small>Available only on this computer and only before the first admin is created.</small></p>
+    @if ($adminSetupAvailable)
+        <p class="login-admin-setup"><a href="{{ route('admin.setup') }}">Create or reset the initial admin account</a><small>After setup, set ALLOW_ADMIN_SETUP=false to disable this form.</small></p>
     @endif
 
     <style>

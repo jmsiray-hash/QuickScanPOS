@@ -73,7 +73,7 @@ php artisan admin:bootstrap
 
 The bootstrap command securely prompts for the admin email and a private password (minimum 12 characters). It only runs while no administrator exists. If the email belongs to an existing staff account, it promotes that account and replaces its password. No default admin credentials are stored in the repository. Existing installs are not modified by the updated seeder; for older seeded accounts, use the bootstrap command to promote/reset the selected account and remove or reset any other accounts that still use the old shared `password123` password.
 
-For local development, the login page also links to a one-time first-admin setup form. The web setup is limited to loopback requests in the local environment and is disabled after an administrator exists. The CLI bootstrap command is the supported setup path for deployed environments.
+The login page exposes `/admin/setup` while no administrator exists, including in production. To replace an existing or legacy seeded initial admin, set `ALLOW_ADMIN_SETUP=true` in the environment; the form updates the existing initial admin (or the legacy `admin_juan` account) instead of creating another admin. Turn the flag back off immediately after setup. If configuration is cached, rebuild/clear the Laravel configuration cache for the setting to take effect. Keep this recovery flag disabled at all other times.
 
 Admins can update their own sign-in email and password in **Company Settings**, and can create or promote staff accounts as administrators from **Users**. Public staff registration is disabled. Cashier accounts are confined to the cashier register and logout; administrators retain access to management pages.
 

@@ -16,25 +16,31 @@ class InitialAdminController extends Controller
 {
     public function create(Request $request): View|RedirectResponse
     {
-        $this->ensureLocalSetup($request);
-
-        if (User::query()->where('role', 'admin')->exists()) {
-            return to_route('login')->with('status', 'An administrator already exists. Sign in with your admin account.');
+        if (! $this->setupAllowed()) {
+            return to_route('login')->with('status', 'Admin setup is disabled. Sign in with your admin account.');
         }
 
-        return view('auth.admin-setup');
+        return view('auth.admin-setup', [
+            'replacingAdmin' => User::query()->where('role', 'admin')->exists()
+                || ((bool) config('app.allow_admin_setup')
+                    && User::query()->where('username', 'admin_juan')->exists()),
+        ]);
     }
 
     public function store(Request $request): RedirectResponse
     {
-        $this->ensureLocalSetup($request);
-
-        if (User::query()->where('role', 'admin')->exists()) {
-            return to_route('login')->with('status', 'An administrator already exists. Sign in with your admin account.');
+        if (! $this->setupAllowed()) {
+            return to_route('login')->with('status', 'Admin setup is disabled. Sign in with your admin account.');
         }
 
         $email = strtolower(trim((string) $request->input('email')));
-        $existingUser = User::query()->where('email', $email)->first();
+        $request->merge(['email' => $email]);
+        $existingAdmin = User::query()->where('role', 'admin')->orderBy('id')->first();
+        $existingUser = $existingAdmin
+            ?? (config('app.allow_admin_setup')
+                ? User::query()->where('username', 'admin_juan')->first()
+                : null)
+            ?? User::query()->where('email', $email)->first();
         $validated = $request->validate([
             'full_name' => ['required', 'string', 'max:100'],
             'email' => [
@@ -47,13 +53,20 @@ class InitialAdminController extends Controller
         ]);
 
         DB::transaction(function () use ($validated, $existingUser): void {
-            if (User::query()->where('role', 'admin')->exists()) {
-                abort(409, 'An administrator account has already been created.');
+            $existingAdmin = User::query()->where('role', 'admin')->orderBy('id')->lockForUpdate()->first();
+            if ($existingAdmin !== null) {
+                abort_unless((bool) config('app.allow_admin_setup'), 404);
+                $target = $existingAdmin;
+            } else {
+                $target = $existingUser === null
+                    ? null
+                    : User::query()->lockForUpdate()->find($existingUser->getKey());
             }
 
-            if ($existingUser !== null) {
-                $existingUser->forceFill([
+            if ($target !== null) {
+                $target->forceFill([
                     'full_name' => $validated['full_name'],
+                    'email' => strtolower($validated['email']),
                     'password' => $validated['password'],
                     'role' => 'admin',
                 ])->save();
@@ -86,11 +99,9 @@ class InitialAdminController extends Controller
         return to_route('login')->with('status', 'Administrator created. Sign in with Admin login and change this password after setup.');
     }
 
-    private function ensureLocalSetup(Request $request): void
+    private function setupAllowed(): bool
     {
-        abort_unless(
-            app()->environment(['local', 'testing']) && in_array($request->ip(), ['127.0.0.1', '::1'], true),
-            404,
-        );
+        return ! User::query()->where('role', 'admin')->exists()
+            || (bool) config('app.allow_admin_setup');
     }
 }

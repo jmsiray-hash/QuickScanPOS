@@ -4,6 +4,8 @@ return [
     'name' => env('APP_NAME', 'QuickScanPos'),
     'env' => env('APP_ENV', 'production'),
     'debug' => (bool) env('APP_DEBUG', false),
+
+    'allow_admin_setup' => (bool) env('ALLOW_ADMIN_SETUP', false),
     'url' => env('APP_URL', 'http://localhost'),
     'timezone' => 'UTC',
     'locale' => env('APP_LOCALE', 'en'),

@@ -1,4 +1,5 @@
 <?php
+use App\Http\Controllers\Auth\InitialAdminController;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\CustomerAuthController;
 use App\Http\Controllers\PageController;
@@ -18,6 +19,10 @@ use Illuminate\Support\Facades\Route;
 Route::get('/',[PageController::class,'home'])->name('home');
 Route::get('/home',[PageController::class,'home']);
 Route::get('/about',[PageController::class,'about'])->name('about');
+Route::middleware('guest')->group(function(){
+ Route::get('/admin/setup',[InitialAdminController::class,'create'])->name('admin.setup');
+ Route::post('/admin/setup',[InitialAdminController::class,'store'])->middleware('throttle:5,1')->name('admin.setup.store');
+});
 Route::get('/dashboard',function(){
  $lowStockQuery=\App\Models\Product::query()->where('is_active',true)->where('stock_quantity','<=',5);
  $lowStockCount=(clone $lowStockQuery)->count();

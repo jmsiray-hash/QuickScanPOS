@@ -56,22 +56,29 @@ class AdminBootstrapTest extends TestCase
         $this->assertDatabaseCount('users', 1);
     }
 
-    public function test_login_links_to_local_first_admin_setup(): void
+    public function test_login_links_to_admin_setup_while_no_admin_exists(): void
     {
         $this->get(route('login'))
             ->assertOk()
             ->assertSee(route('admin.setup'), false)
-            ->assertSee('Create the first admin account');
+            ->assertSee('Create or reset the initial admin account');
     }
 
-    public function test_first_admin_can_be_created_from_local_login_setup(): void
+    public function test_first_admin_can_be_created_from_web_setup_in_production(): void
     {
-        $this->post(route('admin.setup.store'), [
-            'full_name' => 'Store Owner',
-            'email' => 'owner@gmail.com',
-            'password' => 'Temporary-Secure-Pass-2026',
-            'password_confirmation' => 'Temporary-Secure-Pass-2026',
-        ])->assertRedirect(route('login'))
+        $this->app['env'] = 'production';
+        $this->withoutMiddleware(\Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class);
+        $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.8'])
+            ->get(route('admin.setup'))
+            ->assertOk();
+
+        $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.8'])
+            ->post(route('admin.setup.store'), [
+                'full_name' => 'Store Owner',
+                'email' => 'owner@gmail.com',
+                'password' => 'Temporary-Secure-Pass-2026',
+                'password_confirmation' => 'Temporary-Secure-Pass-2026',
+            ])->assertRedirect(route('login'))
             ->assertSessionHas('status');
 
         $admin = User::query()->where('email', 'owner@gmail.com')->firstOrFail();
@@ -100,19 +107,70 @@ class AdminBootstrapTest extends TestCase
         $this->assertTrue(password_verify('Temporary-Secure-Pass-2026', $staff->fresh()->password));
     }
 
-    public function test_first_admin_setup_is_not_available_outside_localhost_or_local_environment(): void
+    public function test_existing_admin_setup_is_disabled_unless_recovery_flag_is_enabled(): void
     {
-        $this->withServerVariables(['REMOTE_ADDR' => '192.0.2.10'])
-            ->get(route('admin.setup'))
-            ->assertNotFound();
+        $admin = User::factory()->create([
+            'username' => 'legacy_owner',
+            'email' => 'legacy-owner@example.com',
+            'role' => 'admin',
+        ]);
+        config(['app.allow_admin_setup' => false]);
 
-        $this->withServerVariables(['REMOTE_ADDR' => '127.0.0.1'])
-            ->post(route('admin.setup.store'), [])
-            ->assertSessionHasErrors(['full_name', 'email', 'password']);
+        $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.8'])
+            ->get(route('admin.setup'))
+            ->assertRedirect(route('login'));
+
+        config(['app.allow_admin_setup' => true]);
+        $this->app['env'] = 'production';
+        $this->withoutMiddleware(\Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class);
+        $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.8'])
+            ->get(route('admin.setup'))
+            ->assertOk()
+            ->assertSee('replace the initial administrator account');
+
+        $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.8'])
+            ->post(route('admin.setup.store'), [
+                'full_name' => 'New Owner',
+                'email' => 'new-owner@example.com',
+                'password' => 'New-Temporary-Pass-2026',
+                'password_confirmation' => 'New-Temporary-Pass-2026',
+            ])
+            ->assertRedirect(route('login'));
+
+        $admin->refresh();
+        $this->assertSame('new-owner@example.com', $admin->email);
+        $this->assertSame('admin', $admin->role);
+        $this->assertTrue(password_verify('New-Temporary-Pass-2026', $admin->password));
+        $this->assertDatabaseCount('users', 1);
+    }
+
+    public function test_recovery_flag_promotes_and_replaces_the_legacy_seeded_admin(): void
+    {
+        $legacy = User::factory()->create([
+            'username' => 'admin_juan',
+            'email' => 'juan@example.com',
+            'role' => 'cashier',
+        ]);
+        config(['app.allow_admin_setup' => true]);
 
         $this->app['env'] = 'production';
-        $this->withServerVariables(['REMOTE_ADDR' => '127.0.0.1'])
+        $this->withoutMiddleware(\Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class);
+        $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.8'])
             ->get(route('admin.setup'))
-            ->assertNotFound();
+            ->assertOk();
+
+        $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.8'])
+            ->post(route('admin.setup.store'), [
+                'full_name' => 'Store Owner',
+                'email' => 'owner@gmail.com',
+                'password' => 'New-Temporary-Pass-2026',
+                'password_confirmation' => 'New-Temporary-Pass-2026',
+            ])->assertRedirect(route('login'));
+
+        $legacy->refresh();
+        $this->assertSame('owner@gmail.com', $legacy->email);
+        $this->assertSame('admin', $legacy->role);
+        $this->assertTrue(password_verify('New-Temporary-Pass-2026', $legacy->password));
+        $this->assertDatabaseCount('users', 1);
     }
 }
