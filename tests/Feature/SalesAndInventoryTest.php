@@ -433,10 +433,12 @@ class SalesAndInventoryTest extends TestCase
             'actual_cash' => 100,
         ]);
 
-        $this->get(route('cashier-dashboard'))
+        $this->withSession(['status' => 'Shift closed. Expected cash: ₱100.00.'])
+            ->get(route('cashier-dashboard'))
             ->assertOk()
             ->assertSee('SHIFT NOT OPEN')
-            ->assertSee('Open your cashier shift');
+            ->assertSee('Open your cashier shift')
+            ->assertDontSee('Shift closed. Expected cash:');
 
         $this->post(route('pos.shift.open'), [
             'opening_cash' => 50,

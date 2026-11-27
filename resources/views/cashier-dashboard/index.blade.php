@@ -5,10 +5,12 @@
 @section('content')
     <section class="cashier-app">
         <header class="cashier-topbar">
-            <div>
+            <a class="cashier-back-button" href="{{ route('dashboard') }}" aria-label="Back to dashboard" title="Back to dashboard">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5m0 0 7 7m-7-7 7-7"/></svg>
+            </a>
+            <div class="cashier-title-group">
                 <p class="cashier-kicker">QUICKSCAN POS <span>·</span> REGISTER 01</p>
                 <h1>Cashier dashboard</h1>
-                <p class="cashier-subtitle">A clear view of your register, live cart and customer check-ins.</p>
             </div>
             <div class="cashier-topbar-actions">
                 <time class="cashier-clock" id="cashier-clock"></time>
@@ -61,7 +63,7 @@
             </div>
         @endif
 
-        <div id="cashier-notice" class="cashier-notice" role="status" hidden></div>
+        <div id="cashier-notice" class="sr-only" role="status" aria-live="polite"></div>
 
         <div class="cashier-workspace">
             <section class="catalog-pane">
@@ -346,8 +348,8 @@
             }
             function inform(text, isError = false) {
                 notice.textContent = text;
-                notice.className = 'cashier-notice ' + (isError ? 'is-error' : 'is-success');
-                notice.hidden = false;
+                notice.setAttribute('aria-live', isError ? 'assertive' : 'polite');
+                if (isError) console.error(text);
             }
             function renderScanReports(reports, todayCount) {
                 scanReports = reports;
@@ -734,7 +736,7 @@
             });
             document.getElementById('close-sale-dialog').addEventListener('click', () => {
                 document.getElementById('sale-complete-dialog').close();
-                notice.hidden = true;
+                notice.textContent = '';
             });
             const endShiftDialog = document.getElementById('end-shift-dialog');
             const endShiftButton = document.getElementById('end-shift-button');
@@ -822,22 +824,21 @@
         @supports (height:100dvh) { body.cashier-app-body { height:100dvh; } }
         .cashier-app-shell { height:100vh; max-width:none; overflow:hidden; padding:0 22px 14px; }
         @supports (height:100dvh) { .cashier-app-shell { height:100dvh; } }
-        .cashier-app-header { align-items:center; display:flex; height:48px; }
-        .cashier-back-button { align-items:center; background:linear-gradient(135deg,#182b39,#11212d); border:1px solid #294253; border-radius:9px; color:#e7eef6; display:inline-flex; font-size:.8rem; gap:7px; padding:6px 11px; text-decoration:none; }
+        .cashier-back-button { align-items:center; background:linear-gradient(135deg,#182b39,#11212d); border:1px solid #294253; border-radius:9px; color:#e7eef6; display:inline-flex; flex:none; height:34px; justify-content:center; text-decoration:none; width:36px; }
         .cashier-back-button:hover,.cashier-back-button:focus { background:#263b4e; border-color:#14b8a6; }
-        .cashier-back-button span { color:#5eead4; font-size:1.2rem; }
-        .cashier-app-main { background:transparent; border:0; border-radius:0; display:flex; flex-direction:column; height:calc(100vh - 60px); min-height:0; overflow:hidden; padding:0; }
-        @supports (height:100dvh) { .cashier-app-main { height:calc(100dvh - 60px); } }
+        .cashier-back-button svg { fill:none; height:20px; stroke:#5eead4; stroke-linecap:round; stroke-linejoin:round; stroke-width:2; width:20px; }
+        .cashier-app-main { background:transparent; border:0; border-radius:0; display:flex; flex-direction:column; height:calc(100vh - 14px); min-height:0; overflow:hidden; padding:0; }
+        @supports (height:100dvh) { .cashier-app-main { height:calc(100dvh - 14px); } }
         .cashier-app-main > .alert { flex:none; margin:0 0 6px; padding:6px 10px; }
         .cashier-app .button { font:inherit; }
         .cashier-app .pagination { color:#d5e0e9; margin-top:14px; }
         .cashier-app .pagination a { color:#d5e0e9; }
         .cashier-app { display:flex; flex:1; flex-direction:column; min-height:0; }
-        .cashier-topbar { align-items:center; display:flex; flex:none; justify-content:space-between; margin-bottom:10px; min-height:54px; }
-        .cashier-kicker { color:#74e4d3; font-size:.58rem; font-weight:800; letter-spacing:.13em; margin:0 0 2px; }
-        .cashier-topbar h1 { color:#f8fafc; font-size:1.6rem; letter-spacing:-.035em; margin:0; }
-        .cashier-subtitle { color:#8ea1b1; font-size:.78rem; margin:1px 0 0; }
-        .cashier-topbar-actions { align-items:center; display:flex; gap:10px; }
+        .cashier-topbar { align-items:center; display:flex; flex:none; gap:10px; justify-content:space-between; margin-bottom:7px; min-height:38px; }
+        .cashier-title-group { align-items:baseline; display:flex; flex:1; gap:10px; min-width:155px; white-space:nowrap; }
+        .cashier-kicker { color:#74e4d3; font-size:.56rem; font-weight:800; letter-spacing:.1em; margin:0; }
+        .cashier-topbar h1 { color:#f8fafc; font-size:1.2rem; letter-spacing:-.035em; margin:0; }
+        .cashier-topbar-actions { align-items:center; display:flex; flex:none; gap:6px; white-space:nowrap; }
         .cashier-clock { color:#8ea1b1; font-size:.65rem; font-variant-numeric:tabular-nums; white-space:nowrap; }
         .report-quick-link { align-items:center; background:linear-gradient(135deg,#132935,#10212c); border:1px solid #294253; border-radius:9px; color:#c7d7e2; cursor:pointer; display:flex; font:inherit; font-size:.76rem; gap:8px; padding:8px 11px; text-decoration:none; transition:border-color .18s,transform .18s; }
         .report-quick-link:hover { border-color:#27b9a7; transform:translateY(-1px); }
@@ -873,10 +874,6 @@
         .cashier-primary-button:hover,.cashier-primary-button:focus { background:#0d887c; }
         .cashier-primary-button:disabled { background:#425360; cursor:not-allowed; }
         .cashier-secondary-button { background:#263b4e; border:1px solid #42576b; }
-        .cashier-notice { border-radius:7px; flex:none; margin:0 0 7px; padding:6px 10px; }
-        .cashier-notice[hidden] { display:none; }
-        .cashier-notice.is-success { background:#0e302b; color:#a7f3d0; }
-        .cashier-notice.is-error { background:#3a2024; color:#fecaca; }
         .cashier-workspace { align-items:stretch; display:grid; flex:1; gap:16px; grid-template-columns:minmax(0,1.55fr) minmax(390px,1fr); min-height:0; }
         .catalog-pane,.cart-pane { background:linear-gradient(145deg,rgba(20,34,47,.97),rgba(14,26,37,.98)); border:1px solid #294051; border-radius:13px; box-shadow:0 18px 42px rgba(0,0,0,.2),inset 0 1px rgba(255,255,255,.025); min-height:0; min-width:0; }
         .catalog-pane { display:flex; flex-direction:column; overflow:hidden; padding:14px; }
@@ -1073,8 +1070,6 @@
             .product-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
         }
         @media(max-height:700px) and (min-width:741px) {
-            .cashier-app-header { height:40px; }
-            .cashier-app-main { height:calc(100vh - 48px); }
             .cashier-topbar { margin-bottom:4px; min-height:36px; }
             .cashier-topbar h1 { font-size:1.15rem; }
             .cashier-topbar-actions { gap:5px; }
@@ -1085,6 +1080,10 @@
             .catalog-product-details { padding:7px; }
             .cart-calculations { margin-top:3px; padding-top:3px; }
             .payment-section { margin-top:5px; padding-top:5px; }
+        }
+        @media(max-width:1100px) {
+            .cashier-title-group { align-items:flex-start; flex-direction:column; gap:0; }
+            .cashier-topbar { align-items:flex-start; }
         }
         @media(max-width:740px) {
             body.cashier-app-body { height:auto; min-height:100vh; overflow:auto; }
@@ -1106,7 +1105,8 @@
         }
         @media(max-width:520px) {
             .cashier-app-shell { padding-left:10px; padding-right:10px; }
-            .cashier-topbar { align-items:flex-start; flex-direction:row; gap:10px; }
+            .cashier-topbar { align-items:center; flex-wrap:wrap; gap:7px; }
+            .cashier-title-group { flex:1; flex-direction:row; flex-wrap:wrap; gap:6px; }
             .shift-open-form { align-items:stretch; flex-direction:column; }
             .shift-open-form input { width:100%; }
             .cashier-shift-actions { flex-wrap:wrap; justify-content:flex-start; }

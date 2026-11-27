@@ -26,11 +26,7 @@
 </head>
 <body class="{{ request()->routeIs('cashier-dashboard') ? 'cashier-app-body' : '' }}">
 <div class="site-shell {{ request()->routeIs('cashier-dashboard') ? 'cashier-app-shell' : '' }}">
-    @if (request()->routeIs('cashier-dashboard'))
-        <header class="cashier-app-header">
-            <a class="cashier-back-button" href="{{ route('dashboard') }}"><span aria-hidden="true">←</span> Back to dashboard</a>
-        </header>
-    @else
+    @unless (request()->routeIs('cashier-dashboard'))
         <header class="site-header">
             <a class="brand" href="{{ route('home') }}">QuickScanPos</a>
             <nav aria-label="Primary navigation">
@@ -55,10 +51,12 @@
             @endauth
             </nav>
         </header>
-    @endif
+    @endunless
     <main class="{{ request()->routeIs('cashier-dashboard') ? 'cashier-app-main' : '' }}">
-        @if (session('status')) <div class="alert alert-success" role="status">{{ session('status') }}</div> @endif
-        @if ($errors->any()) <div class="alert alert-errors" role="alert"><p>Please correct the following errors:</p><ul>@foreach ($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul></div> @endif
+        @unless (request()->routeIs('cashier-dashboard'))
+            @if (session('status')) <div class="alert alert-success" role="status">{{ session('status') }}</div> @endif
+            @if ($errors->any()) <div class="alert alert-errors" role="alert"><p>Please correct the following errors:</p><ul>@foreach ($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul></div> @endif
+        @endunless
         @isset($slot)
             {{ $slot }}
         @else
