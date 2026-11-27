@@ -13,6 +13,11 @@
                 <h1>Cashier dashboard</h1>
             </div>
             <div class="cashier-topbar-actions">
+                @if ($activeShift)
+                    <span class="shift-open-inline">
+                        Shift started {{ $activeShift->opened_at->format('M j, g:i A') }} · Opening fund ₱{{ number_format($activeShift->opening_cash, 2) }}
+                    </span>
+                @endif
                 <time class="cashier-clock" id="cashier-clock"></time>
                 <button type="button" class="report-quick-link" data-cashier-view="sales-report">
                     <span class="report-quick-icon" aria-hidden="true">₱</span>
@@ -64,10 +69,6 @@
                 @error('opening_cash')<p class="shift-form-error">{{ $message }}</p>@enderror
                 <button class="cashier-primary-button" type="submit">Open Shift</button>
             </form>
-        @else
-            <div class="shift-open-banner">
-                <span>Shift started {{ $activeShift->opened_at->format('M j, g:i A') }} · Opening fund ₱{{ number_format($activeShift->opening_cash, 2) }}</span>
-            </div>
         @endif
 
         <div id="cashier-notice" class="sr-only" role="status" aria-live="polite"></div>
@@ -884,6 +885,7 @@
         .cashier-kicker { color:#74e4d3; font-size:.56rem; font-weight:800; letter-spacing:.1em; margin:0; }
         .cashier-topbar h1 { color:#f8fafc; font-size:1.2rem; letter-spacing:-.035em; margin:0; }
         .cashier-topbar-actions { align-items:center; display:flex; flex:none; gap:6px; white-space:nowrap; }
+        .shift-open-inline { color:#8edbc9; font-size:.62rem; font-variant-numeric:tabular-nums; white-space:nowrap; }
         .cashier-clock { color:#8ea1b1; font-size:.65rem; font-variant-numeric:tabular-nums; white-space:nowrap; }
         .report-quick-link { align-items:center; background:linear-gradient(135deg,#132935,#10212c); border:1px solid #294253; border-radius:9px; color:#c7d7e2; cursor:pointer; display:flex; font:inherit; font-size:.76rem; gap:8px; padding:8px 11px; text-decoration:none; transition:border-color .18s,transform .18s; }
         .report-quick-link:hover { border-color:#27b9a7; transform:translateY(-1px); }
@@ -912,7 +914,6 @@
         .shift-open-form p { color:#aab8c5; font-size:.7rem; margin:0; }
         .shift-open-form strong,.shift-open-form label { font-size:.75rem; }
         .shift-open-form input,.payment-detail input,.discount-panel input,.discount-panel select { background:#101e2a; border:1px solid #3c5264; border-radius:6px; color:#f8fafc; font:inherit; min-width:0; padding:6px 8px; }
-        .shift-open-banner { background:#0d292a; border:1px solid #145b55; border-radius:7px; color:#a7f3d0; flex:none; font-size:.72rem; margin-bottom:8px; padding:6px 10px; }
         .shift-form-error { color:#fca5a5; flex-basis:100%; font-size:.68rem; margin:0; }
         .end-shift-dialog { background:linear-gradient(155deg,#172b38,#0d1822); border:1px solid #405767; border-radius:14px; box-shadow:0 24px 80px rgba(0,0,0,.5); color:#e7eef6; margin:auto; max-width:470px; padding:22px; width:calc(100% - 32px); }
         .end-shift-dialog::backdrop { background:rgba(2,8,15,.78); backdrop-filter:blur(5px); }
@@ -967,7 +968,7 @@
         .add-product-button:hover { background:#c9f0e2; }
         .add-product-button:disabled { cursor:wait; opacity:.65; }
         .catalog-empty { color:#cbd5e1; grid-column:1/-1; padding:24px; }
-        .cart-pane { background:linear-gradient(155deg,#fff,#f3f8f7); border-color:#d5e5e3; color:#1e333b; display:flex; flex-direction:column; overflow-x:hidden; overflow-y:auto; padding:18px; }
+        .cart-pane { background:linear-gradient(155deg,#fff,#f3f8f7); border-color:#d5e5e3; color:#1e333b; display:flex; flex-direction:column; overflow:hidden; padding:18px; }
         .cart-heading { align-items:center; display:flex; justify-content:space-between; }
         .cart-heading h2 { align-items:center; color:#1b3038; display:flex; font-size:1.25rem; gap:9px; margin:0; }
         .cart-heading h2 span { align-items:center; background:#e5f2ef; border-radius:50%; color:#087d70; display:inline-flex; font-size:.75rem; height:27px; justify-content:center; width:27px; }
@@ -977,7 +978,7 @@
         .cart-empty span { color:#88aaa4; font-size:2rem; }
         .cart-empty strong { color:#30484e; font-size:.95rem; }
         .cart-empty small { font-size:.82rem; }
-        .cart-lines { flex:0 0 auto; height:390px; max-height:50vh; min-height:140px; overflow-y:auto; }
+        .cart-lines { flex:0 1 390px; height:390px; max-height:50vh; min-height:120px; overflow-y:auto; }
         .cart-lines[hidden] { display:none; }
         .cart-line { align-items:flex-start; background:rgba(239,247,245,.75); border-bottom:1px solid #dce9e7; display:flex; gap:12px; justify-content:space-between; min-height:76px; padding:8px 10px; }
         .cart-line-main { min-width:0; }
