@@ -25,12 +25,18 @@ class PosPagesTest extends TestCase
 
     public function test_cashier_dashboard_navigation_is_not_highlighted_on_other_pages(): void
     {
-        $this->get(route('pos.index'))
+        $this->get(route('sales.index'))
             ->assertOk()
             ->assertDontSee(
                 'href="'.route('cashier-dashboard').'" aria-current="page"',
                 false,
             );
+    }
+
+    public function test_legacy_pos_entry_redirects_to_the_primary_cashier_register(): void
+    {
+        $this->get(route('pos.index'))
+            ->assertRedirect(route('cashier-dashboard'));
     }
 
     public function test_customer_page_displays_database_records(): void

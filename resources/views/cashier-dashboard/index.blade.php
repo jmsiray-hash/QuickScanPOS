@@ -99,6 +99,14 @@
                     <button id="voice-search" class="voice-search-button" type="button" hidden>Speak</button>
                     <a class="store-qr-shortcut" href="{{ route('pos.store-qr') }}" aria-label="Show store entrance QR">▦</a>
                 </div>
+                <div class="register-tool-row">
+                    <label class="sr-only" for="register-code">Product barcode or customer cart code</label>
+                    <input id="register-code" type="text" placeholder="Barcode, CART- or VERIFY- code" autocomplete="off">
+                    <button id="add-register-code" class="cashier-primary-button" type="button">Add code</button>
+                    <button id="scan-product-code" class="cashier-secondary-button" type="button">Scan barcode / QR</button>
+                    <button id="connect-cashier-phone" class="cashier-secondary-button" type="button">Connect phone</button>
+                </div>
+                <p id="register-feedback" class="register-feedback" role="status" aria-live="polite" hidden></p>
                 <nav class="category-tabs" aria-label="Product categories">
                     <a class="{{ $category === '' ? 'selected' : '' }}" href="{{ route('cashier-dashboard', ['search' => $search]) }}">All products</a>
                     @foreach ($categories as $availableCategory)
@@ -193,6 +201,21 @@
                     <div><p class="cashier-kicker">CURRENT SALE</p><h2>Cart <span id="cart-item-count">0</span></h2></div>
                     <button id="clear-cart" class="text-button" type="button">Clear</button>
                 </div>
+                <section class="cart-customer-panel" aria-label="Customer selection">
+                    <label for="register-customer-search">Customer (optional)</label>
+                    <div class="cart-customer-search">
+                        <input id="register-customer-search" type="search" maxlength="100" placeholder="Name, email or phone" autocomplete="off">
+                        <button id="find-register-customer" type="button">Find</button>
+                    </div>
+                    <select id="register-customer-results" aria-label="Matching customers" hidden>
+                        <option value="">Select a customer</option>
+                    </select>
+                    <div class="cart-customer-details">
+                        <p id="register-customer-info">Guest checkout</p>
+                        <button id="clear-register-customer" type="button" hidden>Clear customer</button>
+                    </div>
+                    <p id="register-customer-message" class="cart-customer-message" role="status" hidden></p>
+                </section>
                 <div id="cart-empty" class="cart-empty">
                     <span aria-hidden="true">▤</span>
                     <strong>Your cart is empty</strong>
@@ -227,22 +250,45 @@
             </aside>
         </div>
         <nav class="cashier-action-tray" aria-label="Cashier quick actions">
-            <button type="button" class="tray-action tray-action-primary" id="start-order">
-                <span aria-hidden="true">＋</span><span>Start order</span>
-            </button>
             <button type="button" class="tray-action is-selected" data-cashier-view="catalog">
-                <span aria-hidden="true">▦</span><span>Menu</span>
+                <span aria-hidden="true">▦</span><span>Catalog</span>
+            </button>
+            <button type="button" class="tray-action" id="show-mobile-cart">
+                <span aria-hidden="true">▤</span><span>Cart</span>
+            </button>
+            <button type="button" class="tray-action" id="mobile-scan-code">
+                <span aria-hidden="true">⌗</span><span>Scan</span>
             </button>
             <button type="button" class="tray-action" data-cashier-view="sales-report">
                 <span aria-hidden="true">₱</span><span>Today's sales</span>
             </button>
-            <button type="button" class="tray-action" data-cashier-view="scan-report">
-                <span aria-hidden="true">⌁</span><span>QR activity</span>
-            </button>
             <a class="tray-action" href="{{ route('customer-activity.index') }}">
                 <span aria-hidden="true">◉</span><span>Customer carts</span>
             </a>
+            <button type="button" class="tray-action tray-action-primary" id="start-order">
+                <span aria-hidden="true">＋</span><span>Start order</span>
+            </button>
         </nav>
+
+        <dialog id="clear-cart-dialog" class="clear-cart-dialog" aria-labelledby="clear-cart-title">
+            <h2 id="clear-cart-title">Clear this cart?</h2>
+            <p>All items will be removed from the current order.</p>
+            <div class="clear-cart-actions">
+                <button id="cancel-clear-cart" class="cashier-secondary-button" type="button">Keep items</button>
+                <button id="confirm-clear-cart" class="clear-cart-confirm" type="button">Clear cart</button>
+            </div>
+        </dialog>
+        <dialog id="cashier-phone-dialog" class="cashier-phone-dialog" aria-labelledby="cashier-phone-title">
+            <header>
+                <div><p class="cashier-kicker">OPTIONAL ITEM CHECK</p><h2 id="cashier-phone-title">Connect cashier phone</h2></div>
+                <button id="close-cashier-phone-dialog" type="button" aria-label="Close phone connection">×</button>
+            </header>
+            <p>Scan this QR with the cashier's phone to verify the items against the order. You can still complete payment without this optional check.</p>
+            <div id="cashier-phone-qr" aria-label="Cashier phone connection QR code"></div>
+            <p id="cashier-phone-status" role="status">Ready to connect.</p>
+            <div id="cashier-phone-verified" class="verified-banner" hidden>All expected items have been checked.</div>
+            <a id="cashier-phone-link" href="#" target="_blank" rel="noopener" hidden>Open phone verification page</a>
+        </dialog>
 
         <dialog id="sale-complete-dialog" class="sale-dialog">
             <div class="sale-dialog-icon">✓</div>
@@ -262,6 +308,11 @@
                 <button id="close-payment-dialog" class="payment-dialog-close" type="button" aria-label="Close payment">×</button>
             </header>
             <div class="payment-dialog-total"><span>Total due</span><strong id="payment-dialog-total">₱0.00</strong></div>
+            <div class="payment-dialog-breakdown">
+                <div><span>Subtotal</span><strong id="payment-dialog-subtotal">₱0.00</strong></div>
+                <div><span>Discount</span><strong id="payment-dialog-discount">−₱0.00</strong></div>
+                <div><span>Tax</span><strong id="payment-dialog-tax">₱0.00</strong></div>
+            </div>
             <section class="payment-section">
                 <div class="payment-options" role="group" aria-label="Payment method">
                     <button type="button" class="payment-option selected" data-method="cash">Cash</button>
@@ -272,7 +323,7 @@
                 <div id="cash-payment-fields" class="payment-detail">
                     <label for="cash-received">Cash received (₱)</label>
                     <input id="cash-received" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00">
-                    <p id="cash-change">Change: ₱0.00</p>
+                    <p id="cash-change" role="status">Enter the amount received.</p>
                 </div>
                 <div id="wallet-payment-fields" class="payment-detail" hidden>
                     <label for="payment-reference">Payment reference number</label>
@@ -281,6 +332,7 @@
                 @unless ($activeShift)
                     <p class="shift-required-note">Open your shift to enable payment.</p>
                 @endunless
+                <p id="payment-error" class="payment-error" role="alert" hidden></p>
                 <button id="complete-sale" class="complete-sale-button" type="button" @disabled(!$activeShift)>
                     Complete payment · ₱<span id="payment-total">0.00</span>
                 </button>
@@ -290,9 +342,9 @@
         <dialog id="customer-qr-dialog" class="customer-qr-dialog" aria-labelledby="customer-qr-title">
             <header class="customer-qr-dialog-header">
                 <div>
-                    <p class="cashier-kicker">CUSTOMER CHECKOUT</p>
-                    <h2 id="customer-qr-title">Scan customer QR</h2>
-                    <p>Hold the customer's checkout QR in front of the camera.</p>
+                    <p class="cashier-kicker">PRODUCT AND CUSTOMER SCAN</p>
+                    <h2 id="customer-qr-title">Scan a barcode or QR</h2>
+                    <p>Scan a product code, customer cart QR, or verification QR.</p>
                 </div>
                 <button id="stop-customer-qr" class="customer-qr-dialog-close" type="button" aria-label="Close scanner">×</button>
             </header>
@@ -326,6 +378,7 @@
     </section>
 
     <script src="https://unpkg.com/html5-qrcode"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             const csrf = document.querySelector('meta[name="csrf-token"]').content;
@@ -338,9 +391,11 @@
             const hasOpenShift = @json($activeShift !== null);
             const scanReportUrl = @json(route('cashier-dashboard.scan-report'));
             const salesReportUrl = @json(route('cashier-dashboard.sales-report'));
+            const phoneStatusUrlTemplate = @json(route('pos.verify-status', 'VERIFY_CODE'));
             const customerQrReader = document.getElementById('customer-qr-reader');
             const customerQrDialog = document.getElementById('customer-qr-dialog');
             const customerQrStatus = document.getElementById('customer-qr-status');
+            const cashierPhoneDialog = document.getElementById('cashier-phone-dialog');
             let customerQrScanner = null;
             let customerQrScanInProgress = false;
             let lastCustomerQrCode = '';
@@ -349,6 +404,9 @@
             let activeCashierView = 'catalog';
             let reportPollTimer = null;
             let reportPollInProgress = false;
+            let phoneStatusTimer = null;
+            let phoneStatusRequestInProgress = false;
+            let customerLookupRequest = 0;
             let cart = null;
             let orderStarted = false;
             let paymentMethod = 'cash';
@@ -374,6 +432,13 @@
                 notice.textContent = text;
                 notice.setAttribute('aria-live', isError ? 'assertive' : 'polite');
                 if (isError) console.error(text);
+            }
+            function showRegisterFeedback(text, isError = false) {
+                const feedback = document.getElementById('register-feedback');
+                feedback.textContent = text;
+                feedback.className = 'register-feedback' + (isError ? ' is-error' : ' is-success');
+                feedback.hidden = false;
+                inform(text, isError);
             }
             function renderScanReports(reports, todayCount) {
                 scanReports = reports;
@@ -423,39 +488,55 @@
                 if (customerQrDialog.open) customerQrDialog.close();
                 return true;
             }
-            async function acceptCustomerQr(code) {
+            async function acceptScannedCode(code) {
                 const now = Date.now();
                 if (customerQrScanInProgress || (code === lastCustomerQrCode && now - lastCustomerQrAt < 2000)) return;
                 lastCustomerQrCode = code;
                 lastCustomerQrAt = now;
                 customerQrScanInProgress = true;
-                customerQrStatus.textContent = 'QR detected. Loading customer cart…';
+                customerQrStatus.textContent = 'Code detected. Adding item or loading cart…';
                 try {
                     const result = await request(@json(route('pos.scan')), 'POST', { code });
                     renderCart(result.cart);
-                    orderStarted = true;
+                    if (result.customer_cart_token) orderStarted = true;
                     await stopCustomerQrCamera();
-                    customerQrStatus.textContent = 'Customer cart loaded.';
-                    inform('Loaded customer cart for ' + (result.customer_name || 'customer') + '. Review the cart and complete payment when ready.');
+                    customerQrStatus.textContent = result.customer_cart_token
+                        ? 'Customer cart loaded.'
+                        : (result.message || 'Product added to the cart.');
+                    showRegisterFeedback(result.customer_cart_token
+                        ? 'Loaded customer cart for ' + (result.customer_name || 'customer') + '. Review the cart and complete payment when ready.'
+                        : (result.message || 'Product added to the cart.'));
+                    if (cart?.verification_code) startPhoneStatusPolling(cart.verification_code);
                     if (activeCashierView === 'scan-report') refreshActiveReport();
                 } catch (error) {
-                    customerQrStatus.textContent = error.message || 'Could not load this customer QR. Try again.';
-                    inform(customerQrStatus.textContent, true);
+                    customerQrStatus.textContent = error.message || 'Could not read this code. Try manual entry.';
+                    showRegisterFeedback(customerQrStatus.textContent, true);
                 } finally {
                     customerQrScanInProgress = false;
                 }
             }
-            document.getElementById('scan-customer-qr').addEventListener('click', async () => {
+            async function startCodeCamera(mode, statusText) {
                 if (customerQrDialog.open) return;
                 if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
-                    inform('Camera access requires HTTPS. Open this page using the forwarded HTTPS URL or localhost.', true);
+                    showRegisterFeedback('Camera access requires HTTPS. Open this page using the forwarded HTTPS URL or localhost.', true);
                     return;
                 }
                 if (!window.Html5Qrcode || !window.Html5QrcodeSupportedFormats) {
-                    inform('Customer QR scanner could not load. Refresh the page or enter the customer cart code in POS Checkout.', true);
+                    showRegisterFeedback('Camera scanner could not load. Enter a product barcode or customer cart code manually.', true);
                     return;
                 }
-                customerQrStatus.textContent = "Point the camera at the customer's checkout QR code.";
+                const formats = mode === 'qr'
+                    ? [Html5QrcodeSupportedFormats.QR_CODE]
+                    : [
+                        Html5QrcodeSupportedFormats.EAN_13,
+                        Html5QrcodeSupportedFormats.EAN_8,
+                        Html5QrcodeSupportedFormats.UPC_A,
+                        Html5QrcodeSupportedFormats.UPC_E,
+                        Html5QrcodeSupportedFormats.CODE_128,
+                        Html5QrcodeSupportedFormats.CODE_39,
+                        Html5QrcodeSupportedFormats.QR_CODE,
+                    ];
+                customerQrStatus.textContent = statusText;
                 try {
                     customerQrDialog.showModal();
                     customerQrScanner = new Html5Qrcode(customerQrReader.id || 'customer-qr-reader');
@@ -467,19 +548,40 @@
                                 const size = Math.min(Math.floor(viewfinderWidth * 0.9), Math.floor(viewfinderHeight * 0.75), 720);
                                 return { width: size, height: size };
                             },
-                            formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
+                            formatsToSupport: formats,
                         },
-                        code => acceptCustomerQr(code),
+                        code => acceptScannedCode(code),
                         () => {},
                     );
                 } catch (error) {
-                    customerQrStatus.textContent = error.message || 'Camera unavailable. Check camera permissions and try again.';
-                    inform(customerQrStatus.textContent, true);
+                    const detail = error && error.message ? error.message : String(error || '');
+                    if (error?.name === 'NotAllowedError' || /permission denied|not allowed/i.test(detail)) {
+                        customerQrStatus.textContent = 'Camera permission was denied. Allow camera access for this site, or enter the code manually.';
+                    } else if (error?.name === 'NotFoundError') {
+                        customerQrStatus.textContent = 'No camera was found. Enter the barcode or cart code manually.';
+                    } else if (error?.name === 'NotReadableError') {
+                        customerQrStatus.textContent = 'The camera could not start. Close other apps using it and try again.';
+                    } else {
+                        customerQrStatus.textContent = detail || 'Camera unavailable. Enter the code manually or retry.';
+                    }
+                    showRegisterFeedback(customerQrStatus.textContent, true);
                     if (customerQrScanner) {
                         customerQrScanner.clear();
                         customerQrScanner = null;
                     }
                 }
+            }
+            document.getElementById('scan-customer-qr').addEventListener('click', () => startCodeCamera(
+                'qr',
+                "Point the camera at the customer's checkout QR code.",
+            ));
+            document.getElementById('scan-product-code').addEventListener('click', () => startCodeCamera(
+                'any',
+                'Scan a product barcode or customer cart QR. Manual code entry is also available.',
+            ));
+            document.getElementById('mobile-scan-code').addEventListener('click', () => {
+                showCashierView('catalog');
+                startCodeCamera('any', 'Scan a product barcode or customer cart QR.');
             });
             document.getElementById('stop-customer-qr').addEventListener('click', () => {
                 stopCustomerQrCamera();
@@ -557,6 +659,9 @@
             }
             function showCashierView(viewName) {
                 activeCashierView = viewName;
+                document.querySelector('.cashier-app').classList.toggle('mobile-cart-focus', false);
+                document.querySelector('.cashier-app').classList.toggle('mobile-report-focus', viewName !== 'catalog');
+                document.getElementById('show-mobile-cart').classList.remove('is-selected');
                 const showReport = viewName === 'scan-report';
                 const showSales = viewName === 'sales-report';
                 document.getElementById('catalog-view').hidden = showReport || showSales;
@@ -605,13 +710,22 @@
                 document.getElementById('payment-total').textContent = due.toFixed(2);
                 document.getElementById('payment-button-total').textContent = money(due);
                 document.getElementById('payment-dialog-total').textContent = money(due);
-                document.getElementById('cash-change').textContent = 'Change: ' + money(Math.max(0, cash - due));
+                document.getElementById('payment-dialog-subtotal').textContent = money(cart?.subtotal || 0);
+                document.getElementById('payment-dialog-discount').textContent = '−' + money(paymentTotals().discount);
+                document.getElementById('payment-dialog-tax').textContent = money(paymentTotals().tax);
+                document.getElementById('cash-change').textContent = cash >= due
+                    ? 'Change: ' + money(cash - due)
+                    : 'Amount still needed: ' + money(Math.max(0, due - cash));
                 const ready = paymentMethod === 'cash'
                     ? cash >= due && due > 0
                     : (!['gcash', 'maya'].includes(paymentMethod) || document.getElementById('payment-reference').value.trim() !== '');
                 document.getElementById('complete-sale').disabled =
                     !hasOpenShift || !cart?.items?.length || !ready
                     || (discountType !== '' && (!discountId || !hasEligibleItems)) || submitting;
+                document.getElementById('complete-sale').textContent = submitting
+                    ? 'Processing payment…'
+                    : 'Complete payment · ₱' + due.toFixed(2);
+                document.getElementById('complete-sale').setAttribute('aria-busy', String(submitting));
                 openPaymentDialogButton.disabled = !cart?.items?.length || submitting;
                 document.getElementById('discount-id').disabled = discountType === '' || !hasEligibleItems;
                 document.getElementById('discount-id').placeholder = hasEligibleItems
@@ -634,6 +748,24 @@
                                 <button type="button" class="quantity-button" data-action="plus" data-id="${item.product_id}" aria-label="Increase quantity">+</button>
                                 <button type="button" class="remove-line" data-id="${item.product_id}">Remove</button>
                             </div>
+                            <div class="cart-line-discount">
+                                <label>
+                                    <span>Discount</span>
+                                    <select class="line-discount-type" data-id="${item.product_id}" ${cart.customer_id ? '' : 'disabled'}>
+                                        <option value="" ${!item.discount_type ? 'selected' : ''}>None</option>
+                                        <option value="store" ${item.discount_type === 'store' ? 'selected' : ''}>Store / loyalty</option>
+                                    </select>
+                                </label>
+                                <label>
+                                    <span>Percent</span>
+                                    <input class="line-discount-percent" data-id="${item.product_id}" type="number" min="0" max="100" step="0.01" value="${Number(item.discount_percent || 0)}" ${cart.customer_id && item.discount_type === 'store' ? '' : 'disabled'}>
+                                </label>
+                                <label>
+                                    <span>Promo price</span>
+                                    <input class="line-promo-price" data-id="${item.product_id}" type="number" min="0" step="0.01" value="${item.promo_price ?? ''}" placeholder="Optional">
+                                </label>
+                            </div>
+                            ${item.senior_pwd_eligible ? '<small class="cart-item-eligibility">Senior/PWD eligible</small>' : ''}
                         </div>
                         <strong class="cart-line-total">${money(item.line_total)}</strong>
                     </article>
@@ -644,6 +776,26 @@
                 document.getElementById('cart-discount').textContent = '−' + money(totals.discount);
                 document.getElementById('cart-tax').textContent = money(totals.tax);
                 document.getElementById('cart-total').textContent = money(totals.total);
+                document.getElementById('register-customer-info').innerHTML = cart.customer_id
+                    ? `<strong>${escapeHtml(cart.customer_name || 'Selected customer')}</strong>${cart.customer_discount_id_type
+                        ? `<br>${escapeHtml(String(cart.customer_discount_id_type).toUpperCase())} ID: ${escapeHtml(cart.customer_discount_id_number || 'not recorded')}`
+                        : ''}${cart.customer_store_discount_reminder
+                        ? '<br><span>Usually requests a store discount</span>'
+                        : ''}<br>Store discount quota: ${money(cart.monthly_discount_used || 0)} used · ${money(cart.monthly_discount_remaining || 0)} remaining`
+                    : (cart.customer_cart_token && cart.customer_name
+                        ? `Scan &amp; Go: ${escapeHtml(cart.customer_name)}`
+                        : 'Guest checkout');
+                const customerIsLocked = Boolean(cart.customer_cart_token && cart.customer_id);
+                document.getElementById('clear-register-customer').hidden = !cart.customer_id || customerIsLocked;
+                document.getElementById('clear-register-customer').disabled = customerIsLocked;
+                if (cart.customer_id) customerResults.value = String(cart.customer_id);
+                document.querySelectorAll('.line-discount-type').forEach(select => {
+                    select.disabled = !cart.customer_id;
+                });
+                document.querySelectorAll('.line-discount-percent').forEach(input => {
+                    const item = items.find(line => Number(line.product_id) === Number(input.dataset.id));
+                    input.disabled = !cart.customer_id || item?.discount_type !== 'store';
+                });
                 updatePaymentState();
             }
             async function refreshCart() {
@@ -652,14 +804,31 @@
                 if (result.cart.items?.length) orderStarted = true;
             }
             async function setQuantity(productId, quantity) {
+                const item = cart?.items?.find(line => Number(line.product_id) === Number(productId));
+                if (!item) return;
+                await updateLine(item, quantity);
+            }
+            async function updateLine(item, quantity, overrides = {}) {
                 try {
                     const result = await request(@json(route('pos.cart.update')), 'POST', {
-                        product_id: Number(productId),
+                        product_id: Number(item.product_id),
                         quantity: Number(quantity),
+                        discount_type: Object.prototype.hasOwnProperty.call(overrides, 'discount_type')
+                            ? overrides.discount_type
+                            : (item.discount_type || null),
+                        discount_percent: Object.prototype.hasOwnProperty.call(overrides, 'discount_percent')
+                            ? Number(overrides.discount_percent || 0)
+                            : Number(item.discount_percent || 0),
+                        promo_price: Object.prototype.hasOwnProperty.call(overrides, 'promo_price')
+                            ? overrides.promo_price
+                            : (item.promo_price ?? null),
                     });
+                    if (cart?.customer_cart_token) {
+                        document.getElementById('cashier-phone-verified').hidden = true;
+                    }
                     renderCart(result.cart);
                 } catch (error) {
-                    inform(error.message, true);
+                    showRegisterFeedback(error.message, true);
                 }
             }
 
@@ -684,9 +853,9 @@
                             quantity,
                         });
                         renderCart(result.cart);
-                        inform('Added to cart: ' + button.closest('.catalog-product').querySelector('h2').textContent);
+                        showRegisterFeedback('Added to cart: ' + button.closest('.catalog-product').querySelector('h2').textContent);
                     } catch (error) {
-                        inform(error.message, true);
+                        showRegisterFeedback(error.message, true);
                     } finally {
                         button.disabled = false;
                     }
@@ -705,26 +874,226 @@
                     setQuantity(item.product_id, nextQuantity);
                 }
             });
+            cartLines.addEventListener('change', event => {
+                const input = event.target.closest('.line-discount-type, .line-discount-percent, .line-promo-price');
+                if (!input || !cart) return;
+                const item = cart.items.find(line => Number(line.product_id) === Number(input.dataset.id));
+                if (!item) return;
+                const row = input.closest('.cart-line');
+                updateLine(item, item.quantity, {
+                    discount_type: row.querySelector('.line-discount-type').value || null,
+                    discount_percent: Number(row.querySelector('.line-discount-percent').value || 0),
+                    promo_price: row.querySelector('.line-promo-price').value === ''
+                        ? null
+                        : Number(row.querySelector('.line-promo-price').value),
+                });
+            });
+            const clearCartDialog = document.getElementById('clear-cart-dialog');
             document.getElementById('clear-cart').addEventListener('click', async () => {
-                if (!cart?.items?.length || !window.confirm('Remove all items from this cart?')) return;
-                for (const item of [...cart.items]) {
-                    const result = await request(@json(route('pos.cart.update')), 'POST', {
-                        product_id: Number(item.product_id),
-                        quantity: 0,
-                    });
-                    cart = result.cart;
+                if (!cart?.items?.length) return;
+                clearCartDialog.showModal();
+            });
+            document.getElementById('cancel-clear-cart').addEventListener('click', () => clearCartDialog.close());
+            document.getElementById('confirm-clear-cart').addEventListener('click', async event => {
+                const button = event.currentTarget;
+                if (!cart?.items?.length || button.disabled) return;
+                button.disabled = true;
+                try {
+                    for (const item of [...cart.items]) {
+                        const result = await request(@json(route('pos.cart.update')), 'POST', {
+                            product_id: Number(item.product_id),
+                            quantity: 0,
+                        });
+                        cart = result.cart;
+                    }
+                    renderCart(cart);
+                    orderStarted = false;
+                    clearCartDialog.close();
+                    showRegisterFeedback('Cart cleared.');
+                } catch (error) {
+                    showRegisterFeedback(error.message || 'The cart could not be fully cleared. Review the remaining items and retry.', true);
+                } finally {
+                    button.disabled = false;
                 }
-                renderCart(cart);
-                orderStarted = false;
-                inform('Cart cleared.');
             });
             document.getElementById('start-order').addEventListener('click', () => {
                 orderStarted = true;
                 showCashierView('catalog');
                 document.getElementById('catalog-search').focus();
-                inform(cart?.items?.length ? 'Order ready. Continue editing the current cart.' : 'New order started. Search or choose a product to add.');
+                showRegisterFeedback(cart?.items?.length ? 'Order ready. Continue editing the current cart.' : 'New order started. Search or choose a product to add.');
+            });
+            document.getElementById('show-mobile-cart').addEventListener('click', () => {
+                document.querySelector('.cashier-app').classList.add('mobile-cart-focus');
+                document.querySelector('.cashier-app').classList.remove('mobile-report-focus');
+                document.querySelectorAll('.cashier-action-tray .tray-action').forEach(button => {
+                    button.classList.toggle('is-selected', button.id === 'show-mobile-cart');
+                });
+            });
+            document.querySelectorAll('[data-cashier-view="catalog"]').forEach(button => {
+                button.addEventListener('click', () => {
+                    document.querySelector('.cashier-app').classList.remove('mobile-cart-focus', 'mobile-report-focus');
+                });
+            });
+            document.querySelectorAll('[data-cashier-view="sales-report"], [data-cashier-view="scan-report"]').forEach(button => {
+                button.addEventListener('click', () => {
+                    document.querySelector('.cashier-app').classList.remove('mobile-cart-focus');
+                    document.querySelector('.cashier-app').classList.add('mobile-report-focus');
+                });
             });
 
+            const customerSearch = document.getElementById('register-customer-search');
+            const customerResults = document.getElementById('register-customer-results');
+            const customerInfo = document.getElementById('register-customer-info');
+            const customerMessage = document.getElementById('register-customer-message');
+            async function searchRegisterCustomer() {
+                const search = customerSearch.value.trim();
+                if (!search) {
+                    customerMessage.textContent = 'Enter a name, email or phone number to search.';
+                    customerMessage.hidden = false;
+                    return;
+                }
+                const requestId = ++customerLookupRequest;
+                customerMessage.hidden = true;
+                customerResults.hidden = false;
+                customerResults.disabled = true;
+                customerResults.innerHTML = '<option value="">Searching customers…</option>';
+                try {
+                    const result = await request(@json(route('customers.lookup')) + '?search=' + encodeURIComponent(search));
+                    if (requestId !== customerLookupRequest) return;
+                    customerResults.innerHTML = '<option value="">Select a customer</option>' + result.customers.map(customer =>
+                        `<option value="${Number(customer.id)}">${escapeHtml(customer.full_name)} · ${escapeHtml(customer.email || customer.phone || '')}</option>`
+                    ).join('');
+                    customerResults.disabled = result.customers.length === 0;
+                    if (result.customers.length === 0) {
+                        customerMessage.textContent = 'No matching customer found. Guest checkout remains available.';
+                        customerMessage.hidden = false;
+                    }
+                } catch (error) {
+                    if (requestId !== customerLookupRequest) return;
+                    customerMessage.textContent = error.message || 'Customer search failed.';
+                    customerMessage.hidden = false;
+                    customerResults.hidden = true;
+                } finally {
+                    if (requestId === customerLookupRequest) customerResults.disabled = false;
+                }
+            }
+            async function selectRegisterCustomer(customerId) {
+                try {
+                    const result = await request(@json(route('pos.customer.select')), 'POST', {
+                        customer_id: customerId === '' ? null : Number(customerId),
+                    });
+                    renderCart(result.cart);
+                    customerResults.hidden = !customerId;
+                    customerResults.value = customerId || '';
+                    customerMessage.textContent = result.message;
+                    customerMessage.hidden = false;
+                    inform(result.message);
+                } catch (error) {
+                    customerMessage.textContent = error.message || 'Could not update the selected customer.';
+                    customerMessage.hidden = false;
+                    customerResults.value = cart?.customer_id ? String(cart.customer_id) : '';
+                }
+            }
+            document.getElementById('find-register-customer').addEventListener('click', searchRegisterCustomer);
+            customerSearch.addEventListener('keydown', event => {
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    searchRegisterCustomer();
+                }
+            });
+            customerResults.addEventListener('change', event => {
+                if (event.target.value) selectRegisterCustomer(event.target.value);
+            });
+            document.getElementById('clear-register-customer').addEventListener('click', () => selectRegisterCustomer(''));
+            document.getElementById('register-code').addEventListener('keydown', event => {
+                if (event.key !== 'Enter') return;
+                event.preventDefault();
+                document.getElementById('add-register-code').click();
+            });
+            document.getElementById('add-register-code').addEventListener('click', async () => {
+                const input = document.getElementById('register-code');
+                const code = input.value.trim();
+                if (!code) {
+                    showRegisterFeedback('Enter a product barcode or customer cart code.', true);
+                    input.focus();
+                    return;
+                }
+                try {
+                    const result = await request(@json(route('pos.scan')), 'POST', { code });
+                    renderCart(result.cart);
+                    if (result.customer_cart_token) {
+                        orderStarted = true;
+                        if (result.verification_code) startPhoneStatusPolling(result.verification_code);
+                        showRegisterFeedback('Loaded customer cart for ' + (result.customer_name || 'customer') + '.');
+                    } else {
+                        showRegisterFeedback(result.message || 'Product added to cart.');
+                    }
+                    input.value = '';
+                } catch (error) {
+                    showRegisterFeedback(error.message || 'Could not add that barcode or cart code.', true);
+                }
+            });
+            const cashierPhoneStatus = document.getElementById('cashier-phone-status');
+            function stopPhoneStatusPolling() {
+                if (phoneStatusTimer) window.clearInterval(phoneStatusTimer);
+                phoneStatusTimer = null;
+                phoneStatusRequestInProgress = false;
+            }
+            function startPhoneStatusPolling(code) {
+                stopPhoneStatusPolling();
+                const statusUrl = phoneStatusUrlTemplate.replace('VERIFY_CODE', encodeURIComponent(code));
+                phoneStatusTimer = window.setInterval(async () => {
+                    if (!cashierPhoneDialog.open || document.visibilityState !== 'visible' || phoneStatusRequestInProgress) return;
+                    phoneStatusRequestInProgress = true;
+                    try {
+                        const result = await request(statusUrl);
+                        const verified = result.is_verified || result.cart?.is_verified;
+                        cashierPhoneStatus.textContent = verified
+                            ? 'All expected items are verified.'
+                            : 'Waiting for the cashier phone to check each item…';
+                        document.getElementById('cashier-phone-verified').hidden = !verified;
+                    } catch (error) {
+                        cashierPhoneStatus.textContent = error.message || 'Could not refresh verification status.';
+                        if (/expired|not found/i.test(cashierPhoneStatus.textContent)) stopPhoneStatusPolling();
+                    } finally {
+                        phoneStatusRequestInProgress = false;
+                    }
+                }, 1000);
+            }
+            document.getElementById('connect-cashier-phone').addEventListener('click', async () => {
+                cashierPhoneDialog.showModal();
+                cashierPhoneStatus.textContent = 'Creating a secure phone connection…';
+                document.getElementById('cashier-phone-qr').replaceChildren();
+                document.getElementById('cashier-phone-link').hidden = true;
+                try {
+                    const result = await request(@json(route('pos.verification.create')), 'POST');
+                    const link = document.getElementById('cashier-phone-link');
+                    link.href = result.verification_url;
+                    link.hidden = false;
+                    if (window.QRCode) {
+                        new QRCode(document.getElementById('cashier-phone-qr'), {
+                            text: result.verification_url,
+                            width: 220,
+                            height: 220,
+                        });
+                    } else {
+                        cashierPhoneStatus.textContent = 'QR library unavailable. Open the phone link below.';
+                    }
+                    if (result.verification_code) startPhoneStatusPolling(result.verification_code);
+                    document.getElementById('cashier-phone-verified').hidden = true;
+                    cashierPhoneStatus.textContent = window.QRCode
+                        ? result.message || 'Scan the QR code with the cashier phone.'
+                        : cashierPhoneStatus.textContent;
+                } catch (error) {
+                    cashierPhoneStatus.textContent = error.message || 'Could not connect the cashier phone. Retry.';
+                    inform(cashierPhoneStatus.textContent, true);
+                }
+            });
+            document.getElementById('close-cashier-phone-dialog').addEventListener('click', () => {
+                cashierPhoneDialog.close();
+                stopPhoneStatusPolling();
+            });
+            cashierPhoneDialog.addEventListener('close', stopPhoneStatusPolling);
             document.getElementById('open-discount').addEventListener('click', event => {
                 const panel = document.getElementById('discount-panel');
                 panel.hidden = !panel.hidden;
@@ -746,6 +1115,7 @@
             document.getElementById('payment-reference').addEventListener('input', updatePaymentState);
             openPaymentDialogButton.addEventListener('click', () => {
                 if (!cart?.items?.length || paymentDialog.open) return;
+                document.getElementById('payment-error').hidden = true;
                 paymentDialog.showModal();
                 if (paymentMethod === 'cash') document.getElementById('cash-received').focus();
                 else if (['gcash', 'maya'].includes(paymentMethod)) document.getElementById('payment-reference').focus();
@@ -771,6 +1141,7 @@
                     renderCart(result.cart);
                     document.getElementById('sale-complete-message').textContent = `Sale #${result.sale_id} · Paid ${money(result.receipt.total)} by ${paymentMethod.toUpperCase()}.`;
                     document.getElementById('sale-receipt-link').href = result.receipt_url;
+                    document.getElementById('sale-receipt-link').textContent = 'View / Print Receipt';
                     paymentDialog.close();
                     document.getElementById('sale-complete-dialog').showModal();
                     orderStarted = false;
@@ -785,6 +1156,8 @@
                     document.getElementById('cash-payment-fields').hidden = false;
                     document.getElementById('wallet-payment-fields').hidden = true;
                 } catch (error) {
+                    document.getElementById('payment-error').textContent = error.message || 'Payment failed. Your cart is still available; correct the issue and try again.';
+                    document.getElementById('payment-error').hidden = false;
                     inform(error.message, true);
                 } finally {
                     submitting = false;
@@ -961,6 +1334,14 @@
         .catalog-search { display:flex; flex:1; gap:8px; min-width:0; }
         .catalog-search input { background:#0c1822; border:1px solid #2c4052; border-radius:7px; color:#f8fafc; flex:1; font:inherit; min-width:0; padding:10px 12px; }
         .catalog-search input::placeholder { color:#8394a5; }
+        .register-tool-row { align-items:center; display:flex; flex:none; gap:7px; margin-top:7px; }
+        .register-tool-row input { background:#0c1822; border:1px solid #2c4052; border-radius:7px; color:#f8fafc; flex:1; font:inherit; min-width:0; padding:8px 10px; }
+        .register-tool-row input::placeholder { color:#8394a5; }
+        .register-tool-row .cashier-primary-button,.register-tool-row .cashier-secondary-button { flex:none; font-size:.7rem; min-height:36px; }
+        .register-feedback { border-radius:6px; flex:none; font-size:.7rem; margin:5px 0 0; padding:6px 9px; }
+        .register-feedback[hidden] { display:none; }
+        .register-feedback.is-success { background:#103a34; border:1px solid #1d7162; color:#aaf1d9; }
+        .register-feedback.is-error { background:#422a2b; border:1px solid #8e4a49; color:#ffd2cc; }
         .voice-search-button { background:#17343b; border:1px solid #2e6b68; border-radius:7px; color:#b4f1de; cursor:pointer; font:inherit; font-size:.68rem; padding:6px 9px; }
         .voice-search-button:disabled { cursor:wait; opacity:.65; }
         .store-qr-shortcut { align-items:center; background:#1c3041; border:1px solid #30485d; border-radius:7px; color:#a7f3d0; display:flex; font-size:1.2rem; justify-content:center; text-decoration:none; width:38px; }
@@ -989,6 +1370,17 @@
         .cart-heading { align-items:center; display:flex; justify-content:space-between; }
         .cart-heading h2 { align-items:center; color:#1b3038; display:flex; font-size:1.25rem; gap:9px; margin:0; }
         .cart-heading h2 span { align-items:center; background:#e5f2ef; border-radius:50%; color:#087d70; display:inline-flex; font-size:.75rem; height:27px; justify-content:center; width:27px; }
+        .cart-customer-panel { background:#f6faf9; border:1px solid #d5e5e3; border-radius:8px; flex:none; margin:8px 0 4px; padding:8px; }
+        .cart-customer-panel>label { color:#43585e; display:block; font-size:.7rem; font-weight:800; margin-bottom:4px; }
+        .cart-customer-search { display:flex; gap:5px; }
+        .cart-customer-search input,.cart-customer-panel select { background:#fff; border:1px solid #c8d9d7; border-radius:5px; color:#263b40; font:inherit; font-size:.72rem; min-width:0; padding:7px; width:100%; }
+        .cart-customer-search button,.cart-customer-details button { background:#e4f3ef; border:1px solid #bddbd3; border-radius:5px; color:#176d62; cursor:pointer; flex:none; font:inherit; font-size:.68rem; font-weight:700; padding:6px 9px; }
+        .cart-customer-details { align-items:center; display:flex; gap:7px; justify-content:space-between; }
+        .cart-customer-details p { color:#53686e; font-size:.67rem; line-height:1.35; margin:5px 0 0; overflow-wrap:anywhere; }
+        .cart-customer-details p strong { color:#1e4445; }
+        .cart-customer-details button[hidden] { display:none; }
+        .cart-customer-message { color:#647b80; font-size:.66rem; margin:4px 0 0; }
+        .cart-customer-message[hidden] { display:none; }
         .text-button { background:transparent; border:0; color:#b44848; cursor:pointer; font:inherit; font-size:.82rem; }
         .cart-empty { align-items:center; color:#63777d; display:flex; flex:0 0 auto; flex-direction:column; gap:6px; justify-content:center; min-height:115px; text-align:center; }
         .cart-empty[hidden] { display:none; }
@@ -1007,6 +1399,11 @@
         .quantity-button { background:#fff; border:1px solid #bdd8d2; border-radius:5px; color:#176d62; cursor:pointer; height:25px; width:28px; }
         .cart-line-controls>span { color:#233b40; font-size:.76rem; min-width:18px; text-align:center; }
         .remove-line { background:transparent; border:0; color:#b44848; cursor:pointer; font-size:.67rem; margin-left:3px; }
+        .cart-line-discount { display:grid; gap:5px; grid-template-columns:1fr .75fr 1fr; margin-top:6px; }
+        .cart-line-discount label { color:#6b7e83; display:grid; font-size:.58rem; gap:2px; min-width:0; }
+        .cart-line-discount select,.cart-line-discount input { background:#fff; border:1px solid #d1e0de; border-radius:4px; color:#354c51; font:inherit; font-size:.63rem; min-width:0; padding:4px; width:100%; }
+        .cart-line-discount :disabled { opacity:.58; }
+        .cart-item-eligibility { color:#397963; display:block; font-size:.61rem; margin-top:4px; }
         .cart-calculations { border-top:1px solid #d2e1df; flex:none; margin-top:5px; padding-top:4px; }
         .cart-calculations>div { align-items:center; color:#53686e; display:flex; font-size:.72rem; justify-content:space-between; padding:2px 0; }
         .cart-calculations strong { color:#293e43; font-variant-numeric:tabular-nums; }
@@ -1042,6 +1439,18 @@
         .sale-dialog h2 { color:#f8fafc; margin:0; }
         .sale-dialog p { color:#b5c3cf; }
         .sale-dialog-actions { display:flex; gap:10px; justify-content:center; }
+        .clear-cart-dialog,.cashier-phone-dialog { background:linear-gradient(155deg,#fff,#f1f8f6); border:1px solid #cadeda; border-radius:14px; box-shadow:0 24px 80px rgba(0,0,0,.4); color:#20373d; margin:auto; max-width:440px; padding:22px; width:calc(100% - 28px); }
+        .clear-cart-dialog::backdrop,.cashier-phone-dialog::backdrop { background:rgba(2,8,15,.74); backdrop-filter:blur(4px); }
+        .clear-cart-dialog h2,.cashier-phone-dialog h2 { color:#20373d; font-size:1.2rem; margin:0; }
+        .clear-cart-dialog p,.cashier-phone-dialog>p { color:#586f74; font-size:.8rem; }
+        .clear-cart-actions { display:flex; gap:8px; justify-content:flex-end; margin-top:16px; }
+        .clear-cart-confirm { background:#a43c36; border:1px solid #a43c36; border-radius:7px; color:#fff; cursor:pointer; font:inherit; font-size:.78rem; font-weight:700; padding:8px 12px; }
+        .cashier-phone-dialog>header { align-items:flex-start; display:flex; justify-content:space-between; }
+        .cashier-phone-dialog>header button { background:#e9f1ef; border:1px solid #cbd9d7; border-radius:8px; color:#42585d; cursor:pointer; font:inherit; font-size:1.4rem; height:36px; width:36px; }
+        #cashier-phone-qr { display:flex; justify-content:center; margin:14px auto; min-height:1px; }
+        #cashier-phone-status { color:#176d62; font-size:.78rem; text-align:center; }
+        #cashier-phone-link { display:block; font-size:.78rem; text-align:center; }
+        #cashier-phone-link[hidden] { display:none; }
         .payment-dialog { background:linear-gradient(155deg,#fff,#f1f8f6); border:1px solid #cadeda; border-radius:16px; box-shadow:0 24px 80px rgba(0,0,0,.45); color:#20373d; margin:auto; max-width:520px; padding:22px; width:calc(100% - 32px); }
         .payment-dialog::backdrop { background:rgba(2,8,15,.76); backdrop-filter:blur(5px); }
         .payment-dialog-header { align-items:flex-start; display:flex; justify-content:space-between; }
@@ -1049,6 +1458,11 @@
         .payment-dialog-close { align-items:center; background:#e9f1ef; border:1px solid #cbd9d7; border-radius:8px; color:#42585d; cursor:pointer; display:flex; font:inherit; font-size:1.4rem; height:36px; justify-content:center; width:36px; }
         .payment-dialog-total { align-items:center; background:#eaf5f2; border:1px solid #d3e4e0; border-radius:9px; color:#496166; display:flex; justify-content:space-between; margin-top:16px; padding:12px 14px; }
         .payment-dialog-total strong { color:#078675; font-size:1.45rem; }
+        .payment-dialog-breakdown { display:grid; gap:4px; margin:8px 1px 3px; }
+        .payment-dialog-breakdown>div { color:#60777a; display:flex; font-size:.73rem; justify-content:space-between; }
+        .payment-dialog-breakdown strong { color:#32494d; font-variant-numeric:tabular-nums; }
+        .payment-error { background:#fff1f0; border:1px solid #f0c2bd; border-radius:6px; color:#9f302a; font-size:.74rem; margin:8px 0 0; padding:8px; }
+        .payment-error[hidden] { display:none; }
         .payment-dialog .payment-section { border:0; margin-top:0; padding-top:14px; }
         .payment-dialog .payment-options { grid-template-columns:repeat(4,minmax(0,1fr)); }
         .payment-dialog .payment-detail label { color:#40565c; }
@@ -1183,6 +1597,8 @@
             .cashier-app-main { height:auto; min-height:calc(100vh - 54px); overflow:visible; }
             .cashier-app { min-height:calc(100vh - 54px); }
             .cashier-workspace { flex:none; grid-template-columns:1fr; }
+            .cashier-app.mobile-cart-focus .cashier-workspace { display:block; }
+            .cashier-app.mobile-cart-focus .catalog-pane,.cashier-app.mobile-report-focus .cart-pane { display:none; }
             .catalog-pane { max-height:65vh; min-height:360px; }
             .scan-report-view { min-height:360px; }
             .sales-report-view { min-height:360px; }
@@ -1193,10 +1609,16 @@
             .product-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
             .cart-pane { min-height:440px; position:static; }
             .cart-lines { flex:0 0 auto; height:390px; max-height:50vh; min-height:120px; }
+            .cashier-app.mobile-cart-focus .cart-pane { max-height:calc(100vh - 82px); min-height:0; position:sticky; top:0; }
+            .cashier-app.mobile-cart-focus .cart-lines { flex:1 1 auto; height:auto; max-height:none; min-height:100px; }
+            .cashier-app.mobile-report-focus .catalog-pane { max-height:none; min-height:calc(100vh - 140px); }
             .catalog-product-image { height:90px; }
+            .register-tool-row { flex-wrap:wrap; }
+            .register-tool-row input { flex-basis:100%; }
+            .register-tool-row .cashier-primary-button,.register-tool-row .cashier-secondary-button { flex:1; }
         }
         @media(max-width:520px) {
-            .cashier-app-shell { padding-left:10px; padding-right:10px; }
+            .cashier-app-shell { padding-left:0; padding-right:0; }
             .cashier-topbar { align-items:center; flex-wrap:wrap; gap:7px; }
             .cashier-title-group { flex:1; flex-direction:row; flex-wrap:wrap; gap:6px; }
             .shift-open-form { align-items:stretch; flex-direction:column; }
@@ -1215,7 +1637,7 @@
             .catalog-view-switch { overflow-x:auto; }
             .catalog-view-tab { flex:none; }
             .cashier-action-tray { bottom:0; justify-content:space-around; margin:8px -2px 0; position:sticky; z-index:5; }
-            .tray-action { flex:1; min-width:0; padding:7px 3px; }
+            .tray-action { flex:1; min-width:0; padding:7px 2px; }
             .tray-action span:last-child { font-size:.57rem; }
             .sales-transaction-row { grid-template-columns:31px minmax(0,1fr) auto 60px 24px; }
             .sales-method { display:none; }

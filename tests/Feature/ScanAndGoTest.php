@@ -36,15 +36,14 @@ class ScanAndGoTest extends TestCase
         $this->get(route('home'))
             ->assertOk()
             ->assertSee('QuickScanPos')
-            ->assertSee('Open POS Checkout')
-            ->assertSee(route('pos.index'), false)
+            ->assertSee('Open QuickScan POS Register')
+            ->assertSee(route('cashier-dashboard'), false)
             ->assertSee(route('products.create'), false)
             ->assertSee(route('shop.entry'), false);
 
         $this->get(route('dashboard'))
             ->assertOk()
-            ->assertSee('POS Checkout')
-            ->assertSee('Cashier Dashboard')
+            ->assertSee('QuickScan POS Register')
             ->assertSee(route('cashier-dashboard'), false)
             ->assertSee(route('products.create'), false)
             ->assertSee(route('products.index'), false)
@@ -65,18 +64,14 @@ class ScanAndGoTest extends TestCase
             ->assertSee('Phone-accessible store URL')
             ->assertSee('This address is only reachable on this computer');
         $this->get(route('pos.index'))
+            ->assertRedirect(route('cashier-dashboard'));
+        $this->get(route('cashier-dashboard'))
             ->assertOk()
-            ->assertSee('autocomplete="off"', false)
-            ->assertSee('Focus Scanner')
-            ->assertSee('Scan Customer QR')
-            ->assertSee('customer-scan-success', false)
-            ->assertSee('Proceed to payment when ready.')
-            ->assertSee('await activeScanner.stop()')
-            ->assertSee('Scan Product Barcode')
-            ->assertSee('Connect Cashier Phone')
-            ->assertSee('no Bluetooth pairing')
+            ->assertSee('register-code')
+            ->assertSee('Scan barcode / QR')
+            ->assertSee('Scan a barcode or QR')
+            ->assertSee('Connect phone')
             ->assertSee('Camera access requires HTTPS')
-            ->assertSee('Camera permission was denied')
             ->assertSee('fps: 15')
             ->assertSee('viewfinderWidth * 0.9');
         $this->get(route('products.create'))
@@ -90,11 +85,11 @@ class ScanAndGoTest extends TestCase
             ->assertSee('Connect Phone Online')
             ->assertSee('fps: 15')
             ->assertSee('viewfinderWidth * 0.9');
-        $this->get(route('pos.index'))
+        $this->get(route('cashier-dashboard'))
             ->assertOk()
-            ->assertSee('Cashier Phone Item Check')
-            ->assertSee('Customer &amp; Discounts', false)
-            ->assertSee('Monthly store-discount quota')
+            ->assertSee('Connect cashier phone')
+            ->assertSee('register-customer-search')
+            ->assertSee('Store discount quota')
             ->assertDontSee('Bluetooth HID');
     }
 

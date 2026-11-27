@@ -76,16 +76,20 @@ class SalesAndInventoryTest extends TestCase
             ->assertSee('Units in stock');
     }
 
-    public function test_pos_can_search_products_and_manually_add_the_selected_quantity_to_cart(): void
+    public function test_primary_register_supports_manual_scan_customer_and_item_discount_controls(): void
     {
         $product = $this->product('MANUAL-POS-1', 'Manually Added Rice', 8);
         $this->product('MANUAL-POS-EMPTY', 'Out of stock rice', 0);
 
         $this->get(route('pos.index'))
+            ->assertRedirect(route('cashier-dashboard'));
+        $this->get(route('cashier-dashboard'))
             ->assertOk()
-            ->assertSee('Add Product Manually')
-            ->assertSee('Product name or barcode')
-            ->assertSee('Products added here use their catalog price');
+            ->assertSee('register-code')
+            ->assertSee('Scan barcode / QR')
+            ->assertSee('Connect phone')
+            ->assertSee('register-customer-search')
+            ->assertSee('line-discount-type');
 
         $this->getJson(route('products.search-for-pos', ['q' => 'Manual']))
             ->assertOk()
@@ -156,8 +160,8 @@ class SalesAndInventoryTest extends TestCase
         ->assertSee('GCash')
         ->assertSee('Maya')
         ->assertSee('Back to dashboard')
-        ->assertSee('<aside class="site-sidebar"', false)
-        ->assertSee('<nav aria-label="Primary navigation"', false)
+        ->assertSee('.cashier-app-shell > .site-sidebar,.cashier-app-shell .site-content > footer { display:none; }', false)
+        ->assertDontSee('Checkout</a>', false)
         ->assertSee('QuickScan POS Register')
         ->assertSee('Fruits')
         ->assertSee('Bakery')
@@ -249,7 +253,7 @@ class SalesAndInventoryTest extends TestCase
             ->assertSee('customer-qr-dialog', false)
             ->assertSee('customerQrDialog.showModal()')
             ->assertSee('customer-qr-reader', false)
-            ->assertSee('formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE]')
+            ->assertSee('formatsToSupport: formats')
             ->assertSee('Dashboard Shopper')
             ->assertSee('CART-REPORT-0001');
 
@@ -308,12 +312,36 @@ class SalesAndInventoryTest extends TestCase
             ->assertJsonPath('message', 'Open a shift and record the opening cash fund before completing a sale.');
 
         $this->post(route('pos.shift.open'), ['opening_cash' => 100])
-            ->assertRedirect(route('pos.index'));
+            ->assertRedirect(route('cashier-dashboard'));
         $this->postJson(route('pos.checkout'), [
             'payment_method' => 'cash',
             'cash_received' => 10,
         ])->assertOk()
             ->assertJsonPath('receipt.change_due', 8);
+    }
+
+    public function test_checkout_rejects_a_concurrent_submission_for_the_same_session(): void
+    {
+        $cashier = auth()->user();
+        CashierShift::create(['user_id' => $cashier->id, 'opening_cash' => 100, 'opened_at' => now()]);
+        $product = $this->product('LOCKED-CHECKOUT-1', 'Locked checkout item', 5);
+        $this->postJson(route('pos.scan'), ['code' => $product->barcode])->assertOk();
+
+        $lock = \Illuminate\Support\Facades\Cache::lock('pos-checkout:cashier:'.$cashier->id, 120);
+        $this->assertTrue($lock->get());
+
+        try {
+            $this->postJson(route('pos.checkout'), [
+                'payment_method' => 'cash',
+                'cash_received' => 10,
+            ])->assertStatus(409)
+                ->assertJsonPath('message', 'A checkout is already being processed. Wait for it to finish before retrying.');
+        } finally {
+            $lock->release();
+        }
+
+        $this->assertDatabaseCount('sales', 0);
+        $this->assertSame(5, $product->fresh()->stock_quantity);
     }
 
     public function test_wallet_checkout_requires_and_records_reference_number(): void

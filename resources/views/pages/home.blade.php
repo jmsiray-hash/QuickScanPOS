@@ -9,7 +9,7 @@
         <p class="hero-copy">Register products, scan barcodes or QR codes at checkout, and let customers build a Scan &amp; Go cart from their phones.</p>
         <div class="hero-actions">
             @auth
-                <a class="button" href="{{ route('pos.index') }}">Open POS Checkout</a>
+                <a class="button" href="{{ route('cashier-dashboard') }}">Open QuickScan POS Register</a>
                 <a class="button button-secondary" href="{{ route('products.create') }}">Register a Product</a>
             @else
                 <a class="button" href="{{ route('login') }}">Cashier Sign In</a>
@@ -25,11 +25,11 @@
             <p>Customers scan items with a phone, manage their cart, and get a QR code for the cashier.</p>
             <span class="feature-link">Start shopping <span aria-hidden="true">&rarr;</span></span>
         </a>
-        <a class="feature-card" href="{{ auth()->check() ? route('pos.index') : route('login') }}">
+        <a class="feature-card" href="{{ auth()->check() ? route('cashier-dashboard') : route('login') }}">
             <span class="feature-icon" aria-hidden="true">02</span>
-            <h2>Fast POS Checkout</h2>
-            <p>Scan product barcodes or QR codes with a camera or scanner, then complete checkout.</p>
-            <span class="feature-link">{{ auth()->check() ? 'Open checkout' : 'Cashier sign in' }} <span aria-hidden="true">&rarr;</span></span>
+            <h2>QuickScan POS Register</h2>
+            <p>Scan or search products, manage the customer cart, and complete checkout in one register.</p>
+            <span class="feature-link">{{ auth()->check() ? 'Open register' : 'Cashier sign in' }} <span aria-hidden="true">&rarr;</span></span>
         </a>
         <a class="feature-card" href="{{ auth()->check() ? route('products.create') : route('login') }}">
             <span class="feature-icon" aria-hidden="true">03</span>

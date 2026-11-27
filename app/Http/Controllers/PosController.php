@@ -11,6 +11,7 @@ use App\Models\Sale;
 use App\Models\StoreSetting;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
@@ -21,13 +22,9 @@ class PosController extends Controller
 {
     private const READY_LABEL = 'SCANNED AND CHECKED ITEM - READY FOR PAYMENT';
 
-    public function index(): View
+    public function index(): \Illuminate\Http\RedirectResponse
     {
-        return view('pos.index', [
-            'cart' => $this->cart(),
-            'activeShift' => CashierShift::query()->where('user_id', request()->user()->id)->where('status', 'open')->first(),
-            'vatRate' => (float) config('pos.vat_rate', 0),
-        ]);
+        return to_route('cashier-dashboard');
     }
 
     public function cartContents(): JsonResponse
@@ -352,6 +349,22 @@ class PosController extends Controller
     }
 
     public function checkout(Request $request): JsonResponse
+    {
+        $lock = Cache::lock('pos-checkout:cashier:'.$request->user()->id, 120);
+        if (! $lock->get()) {
+            return response()->json([
+                'message' => 'A checkout is already being processed. Wait for it to finish before retrying.',
+            ], 409);
+        }
+
+        try {
+            return $this->processCheckout($request);
+        } finally {
+            $lock->release();
+        }
+    }
+
+    private function processCheckout(Request $request): JsonResponse
     {
         $cart = session('pos_cart', []);
         if ($cart === []) {

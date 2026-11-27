@@ -36,8 +36,6 @@ class ShiftController extends Controller
             return back()->withErrors(['opening_cash' => 'You already have an open shift.']);
         }
 
-        return $request->boolean('cashier_dashboard')
-            ? to_route('cashier-dashboard')->with('status', 'Shift opened. Opening cash fund recorded.')
-            : to_route('pos.index')->with('status', 'Shift opened. Opening cash fund recorded.');
+        return to_route('cashier-dashboard')->with('status', 'Shift opened. Opening cash fund recorded.');
     }
 }
