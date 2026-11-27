@@ -135,8 +135,16 @@
                             <h2>Customer QR scans</h2>
                             <p>Every customer checkout QR accepted by this register.</p>
                         </div>
-                        <span class="report-live-indicator"><i></i> Live report</span>
+                        <div class="scan-report-actions">
+                            <button id="scan-customer-qr" class="scan-customer-qr-button" type="button">Scan Customer QR</button>
+                            <span class="report-live-indicator"><i></i> Live report</span>
+                        </div>
                     </div>
+                    <section id="customer-qr-camera" class="customer-qr-camera" aria-label="Customer QR scanner" hidden>
+                        <div id="customer-qr-reader"></div>
+                        <p id="customer-qr-status" role="status" aria-live="polite">Point the camera at the customer's checkout QR code.</p>
+                        <button id="stop-customer-qr" class="scan-customer-qr-button scan-customer-qr-close" type="button">Close camera</button>
+                    </section>
                     <div class="scan-report-summary">
                         <div><span>Scans today</span><strong id="report-today-total">{{ $todayScanCount }}</strong></div>
                         <div><span>Showing latest</span><strong>20 <small>events</small></strong></div>
@@ -259,6 +267,7 @@
         </dialog>
     </section>
 
+    <script src="https://unpkg.com/html5-qrcode"></script>
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             const csrf = document.querySelector('meta[name="csrf-token"]').content;
@@ -269,6 +278,13 @@
             const hasOpenShift = @json($activeShift !== null);
             const scanReportUrl = @json(route('cashier-dashboard.scan-report'));
             const salesReportUrl = @json(route('cashier-dashboard.sales-report'));
+            const customerQrReader = document.getElementById('customer-qr-reader');
+            const customerQrCamera = document.getElementById('customer-qr-camera');
+            const customerQrStatus = document.getElementById('customer-qr-status');
+            let customerQrScanner = null;
+            let customerQrScanInProgress = false;
+            let lastCustomerQrCode = '';
+            let lastCustomerQrAt = 0;
             let scanReports = @json($scanReports);
             let cart = null;
             let orderStarted = false;
@@ -329,6 +345,86 @@
                 renderScanReports(result.scans, result.today_count);
                 document.getElementById('report-refresh-status').textContent = 'Updated just now';
             }
+            async function stopCustomerQrCamera() {
+                if (customerQrScanner) {
+                    const scanner = customerQrScanner;
+                    customerQrScanner = null;
+                    try {
+                        await scanner.stop();
+                        scanner.clear();
+                    } catch (error) {
+                        inform(error.message || 'The camera could not be closed.', true);
+                        return false;
+                    }
+                }
+                customerQrCamera.hidden = true;
+                return true;
+            }
+            async function acceptCustomerQr(code) {
+                const now = Date.now();
+                if (customerQrScanInProgress || (code === lastCustomerQrCode && now - lastCustomerQrAt < 2000)) return;
+                lastCustomerQrCode = code;
+                lastCustomerQrAt = now;
+                customerQrScanInProgress = true;
+                customerQrStatus.textContent = 'QR detected. Loading customer cart…';
+                try {
+                    const result = await request(@json(route('pos.scan')), 'POST', { code });
+                    renderCart(result.cart);
+                    orderStarted = true;
+                    await stopCustomerQrCamera();
+                    customerQrStatus.textContent = 'Customer cart loaded.';
+                    inform('Loaded customer cart for ' + (result.customer_name || 'customer') + '. Review the cart and complete payment when ready.');
+                    refreshScanReport().catch(() => {
+                        document.getElementById('report-refresh-status').textContent = 'Unable to refresh the scan report';
+                    });
+                } catch (error) {
+                    customerQrStatus.textContent = error.message || 'Could not load this customer QR. Try again.';
+                    inform(customerQrStatus.textContent, true);
+                } finally {
+                    customerQrScanInProgress = false;
+                }
+            }
+            document.getElementById('scan-customer-qr').addEventListener('click', async () => {
+                if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+                    inform('Camera access requires HTTPS. Open this page using the forwarded HTTPS URL or localhost.', true);
+                    return;
+                }
+                if (!window.Html5Qrcode || !window.Html5QrcodeSupportedFormats) {
+                    inform('Customer QR scanner could not load. Refresh the page or enter the customer cart code in POS Checkout.', true);
+                    return;
+                }
+                customerQrCamera.hidden = false;
+                customerQrStatus.textContent = "Point the camera at the customer's checkout QR code.";
+                try {
+                    customerQrScanner = new Html5Qrcode(customerQrReader.id || 'customer-qr-reader');
+                    await customerQrScanner.start(
+                        { facingMode: 'environment' },
+                        {
+                            fps: 15,
+                            qrbox: (viewfinderWidth, viewfinderHeight) => {
+                                const size = Math.min(Math.floor(viewfinderWidth * 0.9), Math.floor(viewfinderHeight * 0.75), 720);
+                                return { width: size, height: size };
+                            },
+                            formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
+                        },
+                        code => acceptCustomerQr(code),
+                        () => {},
+                    );
+                } catch (error) {
+                    customerQrStatus.textContent = error.message || 'Camera unavailable. Check camera permissions and try again.';
+                    inform(customerQrStatus.textContent, true);
+                    if (customerQrScanner) {
+                        customerQrScanner.clear();
+                        customerQrScanner = null;
+                    }
+                }
+            });
+            document.getElementById('stop-customer-qr').addEventListener('click', () => {
+                stopCustomerQrCamera();
+            });
+            window.addEventListener('pagehide', () => {
+                if (customerQrScanner) customerQrScanner.stop();
+            });
             function renderSalesReport(report) {
                 document.getElementById('header-sales-total').textContent = money(report.revenue);
                 document.getElementById('sales-total').textContent = money(report.revenue);
@@ -809,6 +905,16 @@
         .scan-report-heading { align-items:center; display:flex; flex:none; justify-content:space-between; padding:5px 4px 10px; }
         .scan-report-heading h2 { color:#f4fafb; font-size:1.15rem; letter-spacing:-.02em; margin:0; }
         .scan-report-heading p:not(.cashier-kicker) { color:#8ea1b1; font-size:.68rem; margin:2px 0 0; }
+        .scan-report-actions { align-items:center; display:flex; gap:8px; }
+        .scan-customer-qr-button { background:#0d605a; border:1px solid #168b7d; border-radius:7px; color:#d5fff3; cursor:pointer; font:inherit; font-size:.63rem; font-weight:700; padding:7px 10px; }
+        .scan-customer-qr-button:hover { background:#11756b; }
+        .scan-customer-qr-button:disabled { cursor:wait; opacity:.65; }
+        .customer-qr-camera { background:#10212c; border:1px solid #294352; border-radius:9px; flex:none; margin:0 0 9px; padding:10px; }
+        .customer-qr-camera[hidden] { display:none; }
+        #customer-qr-reader { margin:auto; max-width:540px; width:100%; }
+        #customer-qr-reader video { height:auto !important; max-width:100% !important; width:100% !important; }
+        .customer-qr-camera p { color:#9cb0bc; font-size:.65rem; margin:6px 0; text-align:center; }
+        .scan-customer-qr-close { display:block; margin:0 auto; }
         .report-live-indicator { align-items:center; background:#0d302d; border:1px solid #1a5d53; border-radius:999px; color:#9cebd5; display:inline-flex; font-size:.62rem; gap:6px; padding:5px 9px; }
         .report-live-indicator i { background:#43d6a5; border-radius:50%; box-shadow:0 0 10px rgba(67,214,165,.65); height:6px; width:6px; }
         .scan-report-summary { align-items:center; background:linear-gradient(105deg,#132a35,#11232e); border:1px solid #294352; border-radius:9px; display:flex; flex:none; gap:28px; margin:0 0 9px; padding:8px 11px; }
@@ -926,6 +1032,7 @@
             .tray-action span:last-child { font-size:.57rem; }
             .sales-transaction-row { grid-template-columns:31px minmax(0,1fr) auto 60px 24px; }
             .sales-method { display:none; }
+            .scan-report-actions { align-items:flex-end; flex-direction:column-reverse; }
         }
         @media(prefers-reduced-motion:reduce) {
             .catalog-product,.catalog-view-tab,.report-quick-link { transition:none; }

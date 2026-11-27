@@ -208,6 +208,7 @@ class SalesAndInventoryTest extends TestCase
         $product = $this->product('QR-REPORT-1', 'Report Item', 5);
         $cart = CustomerCart::create([
             'token' => 'CART-REPORT-0001',
+            'verification_code' => 'VERIFY-REPORT-0001',
             'customer_name' => 'Dashboard Shopper',
             'status' => 'ready_for_checkout',
             'expires_at' => now()->addHour(),
@@ -219,7 +220,9 @@ class SalesAndInventoryTest extends TestCase
             'price' => 2,
         ]);
 
-        $this->getJson(route('pos.import-cart', $cart->token))
+        $this->postJson(route('pos.scan'), [
+            'code' => route('pos.verify', $cart->verification_code),
+        ])
             ->assertOk()
             ->assertJsonPath('customer_name', 'Dashboard Shopper');
 
@@ -235,6 +238,9 @@ class SalesAndInventoryTest extends TestCase
             ->assertOk()
             ->assertSee('Cashier dashboard')
             ->assertSee('Customer QR report')
+            ->assertSee('Scan Customer QR')
+            ->assertSee('customer-qr-reader', false)
+            ->assertSee('formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE]')
             ->assertSee('Dashboard Shopper')
             ->assertSee('CART-REPORT-0001');
 
