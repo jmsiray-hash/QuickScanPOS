@@ -30,6 +30,7 @@ class LoginRequest extends FormRequest
         return [
             'email' => ['required', 'string', 'email'],
             'password' => ['required', 'string'],
+            'login_as' => ['required', 'string', 'in:cashier,admin'],
         ];
     }
 
@@ -51,6 +52,18 @@ class LoginRequest extends FormRequest
         }
 
         RateLimiter::clear($this->throttleKey());
+
+        $user = $this->user();
+        $requestedAdmin = $this->input('login_as') === 'admin';
+        if ($user->isAdmin() !== $requestedAdmin) {
+            Auth::logout();
+
+            throw ValidationException::withMessages([
+                'login_as' => $requestedAdmin
+                    ? 'This account does not have administrator access. Choose Cashier login.'
+                    : 'This is an administrator account. Choose Admin login.',
+            ]);
+        }
     }
 
     /**

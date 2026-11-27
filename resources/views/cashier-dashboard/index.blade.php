@@ -274,9 +274,6 @@
             <a class="tray-action" href="{{ route('customer-activity.index') }}">
                 <span aria-hidden="true">◉</span><span>Customer carts</span>
             </a>
-            <button type="button" class="tray-action tray-action-primary" id="start-order">
-                <span aria-hidden="true">＋</span><span>Start order</span>
-            </button>
         </nav>
 
         <dialog id="clear-cart-dialog" class="clear-cart-dialog" aria-labelledby="clear-cart-title">
@@ -419,7 +416,6 @@
             let phoneStatusRequestInProgress = false;
             let customerLookupRequest = 0;
             let cart = null;
-            let orderStarted = false;
             let paymentMethod = 'cash';
             let paymentRefreshInProgress = false;
             let submitting = false;
@@ -510,7 +506,6 @@
                 try {
                     const result = await request(@json(route('pos.scan')), 'POST', { code });
                     renderCart(result.cart);
-                    if (result.customer_cart_token) orderStarted = true;
                     await stopCustomerQrCamera();
                     customerQrStatus.textContent = result.customer_cart_token
                         ? 'Customer cart loaded.'
@@ -789,6 +784,9 @@
                 document.getElementById('cart-discount').textContent = '−' + money(totals.discount);
                 document.getElementById('cart-tax').textContent = money(totals.tax);
                 document.getElementById('cart-total').textContent = money(totals.total);
+                document.getElementById('payment-button-total').textContent = money(totals.total);
+                document.getElementById('payment-dialog-total').textContent = money(totals.total);
+                document.getElementById('payment-total').textContent = totals.total.toFixed(2);
                 document.getElementById('register-customer-info').innerHTML = cart.customer_id
                     ? `<strong>${escapeHtml(cart.customer_name || 'Selected customer')}</strong>${cart.customer_discount_id_type
                         ? `<br>${escapeHtml(String(cart.customer_discount_id_type).toUpperCase())} ID: ${escapeHtml(cart.customer_discount_id_number || 'not recorded')}`
@@ -810,11 +808,13 @@
                     input.disabled = !cart.customer_id || item?.discount_type !== 'store';
                 });
                 updatePaymentState();
+                document.getElementById('payment-button-total').textContent = document.getElementById('cart-total').textContent;
+                document.getElementById('payment-dialog-total').textContent = document.getElementById('cart-total').textContent;
+                document.getElementById('payment-total').textContent = paymentTotals().total.toFixed(2);
             }
             async function refreshCart() {
                 const result = await request(@json(route('pos.cart.contents')));
                 renderCart(result.cart);
-                if (result.cart.items?.length) orderStarted = true;
             }
             async function setQuantity(productId, quantity) {
                 const item = cart?.items?.find(line => Number(line.product_id) === Number(productId));
@@ -847,11 +847,6 @@
 
             document.querySelectorAll('.add-product-button').forEach(button => {
                 button.addEventListener('click', async () => {
-                    if (!orderStarted) {
-                        inform('Start an order before adding products. Your cart will stay ready here.', true);
-                        document.getElementById('start-order').focus();
-                        return;
-                    }
                     const productId = Number(button.dataset.productId);
                     const item = cart?.items?.find(line => Number(line.product_id) === productId);
                     const quantity = Number(item?.quantity || 0) + 1;
@@ -920,7 +915,6 @@
                         cart = result.cart;
                     }
                     renderCart(cart);
-                    orderStarted = false;
                     clearCartDialog.close();
                     showRegisterFeedback('Cart cleared.');
                 } catch (error) {
@@ -928,12 +922,6 @@
                 } finally {
                     button.disabled = false;
                 }
-            });
-            document.getElementById('start-order').addEventListener('click', () => {
-                orderStarted = true;
-                showCashierView('catalog');
-                document.getElementById('catalog-search').focus();
-                showRegisterFeedback(cart?.items?.length ? 'Order ready. Continue editing the current cart.' : 'New order started. Search or choose a product to add.');
             });
             document.getElementById('show-mobile-cart').addEventListener('click', () => {
                 document.querySelector('.cashier-app').classList.add('mobile-cart-focus');
@@ -1035,7 +1023,6 @@
                     const result = await request(@json(route('pos.scan')), 'POST', { code });
                     renderCart(result.cart);
                     if (result.customer_cart_token) {
-                        orderStarted = true;
                         if (result.verification_code) startPhoneStatusPolling(result.verification_code);
                         showRegisterFeedback('Loaded customer cart for ' + (result.customer_name || 'customer') + '.');
                     } else {
@@ -1173,7 +1160,6 @@
                     document.getElementById('sale-receipt-link').textContent = 'View / Print Receipt';
                     paymentDialog.close();
                     document.getElementById('sale-complete-dialog').showModal();
-                    orderStarted = false;
                     document.getElementById('cash-received').value = '';
                     document.getElementById('payment-reference').value = '';
                     document.getElementById('discount-type').value = '';

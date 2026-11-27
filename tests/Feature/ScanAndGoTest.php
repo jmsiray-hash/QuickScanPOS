@@ -578,7 +578,9 @@ class ScanAndGoTest extends TestCase
 
         $this->postJson(route('pos.scan'), ['code' => $cart->token])
             ->assertOk()
-            ->assertJsonPath('cart.items.0.quantity', 2);
+            ->assertJsonPath('cart.items.0.quantity', 2)
+            ->assertJsonPath('cart.items.0.line_total', 16)
+            ->assertJsonPath('cart.total', 16);
 
         $this->postJson(route('pos.verification.create'))
             ->assertOk()
@@ -691,7 +693,9 @@ class ScanAndGoTest extends TestCase
         ])
             ->assertOk()
             ->assertJsonPath('customer_cart_token', $cart->token)
-            ->assertJsonPath('cart.items.0.barcode', $product->barcode);
+            ->assertJsonPath('cart.items.0.barcode', $product->barcode)
+            ->assertJsonPath('cart.items.0.line_total', 11)
+            ->assertJsonPath('cart.total', 11);
     }
 
     public function test_customer_cart_checkout_can_proceed_without_mobile_item_verification(): void

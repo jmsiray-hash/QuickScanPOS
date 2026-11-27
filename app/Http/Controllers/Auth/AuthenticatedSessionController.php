@@ -28,7 +28,9 @@ class AuthenticatedSessionController extends Controller
 
         $request->session()->regenerate();
 
-        return redirect()->intended(route('dashboard', absolute: false));
+        $destination = $request->user()->isAdmin() ? 'dashboard' : 'cashier-dashboard';
+
+        return to_route($destination);
     }
 
     /**
