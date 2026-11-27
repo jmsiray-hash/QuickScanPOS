@@ -423,6 +423,7 @@
             let submitting = false;
 
             const money = value => '₱' + Number(value || 0).toFixed(2);
+            const amount = value => Number.isFinite(Number(value)) ? Number(value) : null;
             const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({
                 '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
             })[char]);
@@ -688,15 +689,22 @@
                 scheduleReportRefresh();
             }
             function paymentTotals() {
-                if (!cart) return { total: 0, discount: 0, tax: 0 };
-                let total = Number(cart.total || 0);
-                let discount = Number(cart.discount || 0);
-                let tax = Number(cart.tax || 0);
+                const items = Array.isArray(cart?.items) ? cart.items : [];
+                if (!items.length) return { subtotal: 0, total: 0, discount: 0, tax: 0 };
+
+                const vatDivider = 1 + Number(vatRate || 0) / 100;
+                const fallbackSubtotal = items.reduce((sum, item) => {
+                    const base = Number(item.unit_price || 0) * Number(item.quantity || 0) / vatDivider;
+                    return sum + Math.round(base * 100) / 100;
+                }, 0);
+                const subtotal = amount(cart.subtotal) ?? fallbackSubtotal;
+                let total = amount(cart.total) ?? items.reduce((sum, item) => sum + Number(item.line_total || 0), 0);
+                let discount = amount(cart.discount) ?? items.reduce((sum, item) => sum + Number(item.discount_amount || 0), 0);
+                let tax = amount(cart.tax) ?? items.reduce((sum, item) => sum + Number(item.tax_amount || 0), 0);
                 if (document.getElementById('discount-type').value) {
-                    const divider = 1 + Number(vatRate || 0) / 100;
                     for (const item of cart.items) {
                         if (!item.senior_pwd_eligible || item.is_promo) continue;
-                        const base = Number(item.unit_price) * Number(item.quantity) / divider;
+                        const base = Number(item.unit_price) * Number(item.quantity) / vatDivider;
                         const eligibleTotal = Math.round(base * 0.8 * 100) / 100;
                         total -= Number(item.line_total) - eligibleTotal;
                         discount -= Number(item.discount_amount || 0);
@@ -705,23 +713,32 @@
                     }
                 }
                 return {
+                    subtotal: Math.max(0, Math.round(subtotal * 100) / 100),
                     total: Math.max(0, Math.round(total * 100) / 100),
                     discount: Math.max(0, Math.round(discount * 100) / 100),
                     tax: Math.max(0, Math.round(tax * 100) / 100),
                 };
             }
+            function renderPaymentSummary(totals) {
+                document.getElementById('cart-subtotal').textContent = money(totals.subtotal);
+                document.getElementById('cart-discount').textContent = '−' + money(totals.discount);
+                document.getElementById('cart-tax').textContent = money(totals.tax);
+                document.getElementById('cart-total').textContent = money(totals.total);
+                document.getElementById('payment-total').textContent = totals.total.toFixed(2);
+                document.getElementById('payment-button-total').textContent = money(totals.total);
+                document.getElementById('payment-dialog-total').textContent = money(totals.total);
+                document.getElementById('payment-dialog-subtotal').textContent = money(totals.subtotal);
+                document.getElementById('payment-dialog-discount').textContent = '−' + money(totals.discount);
+                document.getElementById('payment-dialog-tax').textContent = money(totals.tax);
+            }
             function updatePaymentState() {
-                const due = paymentTotals().total;
+                const totals = paymentTotals();
+                const due = totals.total;
                 const cash = Number(document.getElementById('cash-received').value || 0);
                 const discountType = document.getElementById('discount-type').value;
                 const discountId = document.getElementById('discount-id').value.trim();
                 const hasEligibleItems = Boolean(cart?.items?.some(item => item.senior_pwd_eligible && !item.is_promo));
-                document.getElementById('payment-total').textContent = due.toFixed(2);
-                document.getElementById('payment-button-total').textContent = money(due);
-                document.getElementById('payment-dialog-total').textContent = money(due);
-                document.getElementById('payment-dialog-subtotal').textContent = money(cart?.subtotal || 0);
-                document.getElementById('payment-dialog-discount').textContent = '−' + money(paymentTotals().discount);
-                document.getElementById('payment-dialog-tax').textContent = money(paymentTotals().tax);
+                renderPaymentSummary(totals);
                 document.getElementById('cash-change').textContent = cash >= due
                     ? 'Change: ' + money(cash - due)
                     : 'Amount still needed: ' + money(Math.max(0, due - cash));
@@ -782,13 +799,7 @@
                 `).join('');
                 document.getElementById('cart-item-count').textContent = String(items.reduce((count, item) => count + Number(item.quantity), 0));
                 const totals = paymentTotals();
-                document.getElementById('cart-subtotal').textContent = money(cart.subtotal);
-                document.getElementById('cart-discount').textContent = '−' + money(totals.discount);
-                document.getElementById('cart-tax').textContent = money(totals.tax);
-                document.getElementById('cart-total').textContent = money(totals.total);
-                document.getElementById('payment-button-total').textContent = money(totals.total);
-                document.getElementById('payment-dialog-total').textContent = money(totals.total);
-                document.getElementById('payment-total').textContent = totals.total.toFixed(2);
+                renderPaymentSummary(totals);
                 document.getElementById('register-customer-info').innerHTML = cart.customer_id
                     ? `<strong>${escapeHtml(cart.customer_name || 'Selected customer')}</strong>${cart.customer_discount_id_type
                         ? `<br>${escapeHtml(String(cart.customer_discount_id_type).toUpperCase())} ID: ${escapeHtml(cart.customer_discount_id_number || 'not recorded')}`
@@ -810,9 +821,6 @@
                     input.disabled = !cart.customer_id || item?.discount_type !== 'store';
                 });
                 updatePaymentState();
-                document.getElementById('payment-button-total').textContent = document.getElementById('cart-total').textContent;
-                document.getElementById('payment-dialog-total').textContent = document.getElementById('cart-total').textContent;
-                document.getElementById('payment-total').textContent = paymentTotals().total.toFixed(2);
             }
             async function refreshCart() {
                 const result = await request(@json(route('pos.cart.contents')));

@@ -134,6 +134,8 @@ class SalesAndInventoryTest extends TestCase
             ->assertJsonPath('cart.items.0.product_id', $product->id)
             ->assertJsonPath('cart.items.0.quantity', 3)
             ->assertJsonPath('cart.items.0.line_total', 6)
+            ->assertJsonPath('cart.subtotal', 6)
+            ->assertJsonPath('cart.tax', 0)
             ->assertJsonPath('cart.total', 6);
 
         $this->postJson(route('pos.cart.update'), [
@@ -178,7 +180,11 @@ class SalesAndInventoryTest extends TestCase
         ->assertSee('.cashier-app-shell > .site-sidebar,.cashier-app-shell .site-content > footer { display:none; }', false)
         ->assertDontSee('Start order')
         ->assertSee("const money = value => '₱' + Number(value || 0).toFixed(2);", false)
-        ->assertSee("document.getElementById('payment-button-total').textContent = document.getElementById('cart-total').textContent;", false)
+        ->assertSee('function renderPaymentSummary(totals)', false)
+        ->assertSee("document.getElementById('payment-button-total').textContent = money(totals.total);", false)
+        ->assertSee("document.getElementById('payment-dialog-total').textContent = money(totals.total);", false)
+        ->assertSee("document.getElementById('payment-dialog-subtotal').textContent = money(totals.subtotal);", false)
+        ->assertSee('Array.isArray(cart?.items) ? cart.items : []', false)
         ->assertSee('.catalog-view-switch { display:none; }', false)
         ->assertSee("Today's sales", false)
         ->assertSee('Current sale')

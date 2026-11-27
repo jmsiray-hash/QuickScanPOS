@@ -724,6 +724,9 @@ class ScanAndGoTest extends TestCase
             ->assertJsonPath('customer_cart_token', $cart->token)
             ->assertJsonPath('cart.items.0.barcode', $product->barcode)
             ->assertJsonPath('cart.items.0.line_total', 11)
+            ->assertJsonPath('cart.subtotal', 11)
+            ->assertJsonPath('cart.discount', 0)
+            ->assertJsonPath('cart.tax', 0)
             ->assertJsonPath('cart.total', 11);
     }
 
