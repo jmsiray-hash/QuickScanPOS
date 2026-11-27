@@ -20,7 +20,7 @@ class SalesAndInventoryTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->actingAs(User::factory()->create());
+        $this->actingAs(User::factory()->create(['role' => 'admin']));
     }
 
     public function test_sales_report_filters_transactions_and_sums_sold_items(): void
@@ -58,6 +58,26 @@ class SalesAndInventoryTest extends TestCase
         $this->get(route('sales.show', $sale).'?print=1')
             ->assertOk()
             ->assertSee("get('print') === '1'", false);
+    }
+
+    public function test_cashier_can_view_only_their_own_receipt_from_the_register(): void
+    {
+        $admin = auth()->user();
+        $cashier = User::factory()->create(['role' => 'cashier']);
+
+        $this->actingAs($cashier);
+        $cashierSale = $this->sale('5.00', now());
+
+        $this->get(route('sales.show', $cashierSale))
+            ->assertOk()
+            ->assertSee('Sale Receipt #'.$cashierSale->id);
+
+        $this->actingAs($admin);
+        $adminSale = $this->sale('7.00', now());
+
+        $this->actingAs($cashier)
+            ->get(route('sales.show', $adminSale))
+            ->assertForbidden();
     }
 
     public function test_inventory_can_be_searched_and_filtered_by_stock_level(): void
@@ -383,7 +403,7 @@ class SalesAndInventoryTest extends TestCase
 
     public function test_admin_or_manager_void_restores_stock_and_cashier_is_denied(): void
     {
-        $cashier = auth()->user();
+        $cashier = User::factory()->create(['role' => 'cashier']);
         $shift = CashierShift::create(['user_id' => $cashier->id, 'opening_cash' => 50, 'opened_at' => now()]);
         $product = $this->product('VOID-RESTORE-1', 'Void restore item', 4);
         $sale = Sale::create([
@@ -404,11 +424,13 @@ class SalesAndInventoryTest extends TestCase
             'line_total' => 2,
         ]);
 
-        $this->post(route('sales.void', $sale), ['void_reason' => 'Cashier entered the wrong item'])
+        $this->actingAs($cashier)
+            ->post(route('sales.void', $sale), ['void_reason' => 'Cashier entered the wrong item'])
             ->assertForbidden();
 
         $cashier->update(['role' => 'manager']);
-        $this->post(route('sales.void', $sale), ['void_reason' => 'Cashier entered the wrong item'])
+        $this->actingAs($cashier)
+            ->post(route('sales.void', $sale), ['void_reason' => 'Cashier entered the wrong item'])
             ->assertRedirect()
             ->assertSessionHas('status');
 

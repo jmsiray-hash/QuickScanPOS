@@ -7,7 +7,7 @@
         <header class="settings-heading">
             <p class="settings-eyebrow">STORE PROFILE</p>
             <h1>Company &amp; receipt settings</h1>
-            <p>Set your store details for new customer receipts and manage the admin sign-in email.</p>
+            <p>Set receipt details and update the admin sign-in email or password.</p>
         </header>
 
         <div class="settings-layout">
@@ -37,7 +37,7 @@
                         <span aria-hidden="true">@</span>
                         <div>
                             <h3 id="admin-email-heading">Admin sign-in email</h3>
-                            <p>This email is used to sign in to the existing admin account. Changing it does not change the account's role.</p>
+                            <p>These credentials belong to your current administrator account. Changing them does not change its role.</p>
                         </div>
                     </div>
                     <div class="field">
@@ -46,11 +46,22 @@
                         @error('admin_email')<p class="error">{{ $message }}</p>@enderror
                     </div>
                     <div class="field">
-                        <label for="current-password">Current password <span class="settings-conditional-label">(required to change email)</span></label>
+                        <label for="current-password">Current password <span class="settings-conditional-label">(required to change sign-in details)</span></label>
                         <input id="current-password" name="current_password" type="password" autocomplete="current-password">
-                        <span class="settings-field-hint">We will send a verification link to the new address. The email change remains unverified until you confirm it.</span>
+                        <span class="settings-field-hint">Required to change the admin email or password.</span>
                         @error('current_password')<p class="error">{{ $message }}</p>@enderror
                     </div>
+                    <div class="field">
+                        <label for="new-password">New admin password</label>
+                        <input id="new-password" name="new_password" type="password" autocomplete="new-password" minlength="12">
+                        <span class="settings-field-hint">Leave blank to keep the current password. Use at least 12 characters.</span>
+                        @error('new_password')<p class="error">{{ $message }}</p>@enderror
+                    </div>
+                    <div class="field">
+                        <label for="new-password-confirmation">Confirm new admin password</label>
+                        <input id="new-password-confirmation" name="new_password_confirmation" type="password" autocomplete="new-password" minlength="12">
+                    </div>
+                    <p class="settings-field-hint">Changing the email sends a verification link to the new address. You can also create another administrator from Users.</p>
                 </section>
                 <button class="button settings-save" type="submit">Save settings</button>
             </form>
@@ -90,11 +101,13 @@
         document.addEventListener('DOMContentLoaded', () => {
             const emailInput = document.getElementById('admin-email');
             const passwordInput = document.getElementById('current-password');
+            const newPasswordInput = document.getElementById('new-password');
             const originalEmail = emailInput.dataset.originalEmail;
             const updatePasswordRequirement = () => {
-                passwordInput.required = emailInput.value.trim().toLowerCase() !== originalEmail;
+                passwordInput.required = emailInput.value.trim().toLowerCase() !== originalEmail || newPasswordInput.value.length > 0;
             };
             emailInput.addEventListener('input', updatePasswordRequirement);
+            newPasswordInput.addEventListener('input', updatePasswordRequirement);
             updatePasswordRequirement();
         });
     </script>

@@ -23,7 +23,7 @@ class ScanAndGoTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $cashier = User::factory()->create();
+        $cashier = User::factory()->create(['role' => 'admin']);
         $this->actingAs($cashier);
         CashierShift::create([
             'user_id' => $cashier->id,
@@ -386,7 +386,9 @@ class ScanAndGoTest extends TestCase
             'price' => 25,
         ]);
 
-        $this->get(route('settings.store.edit'))->assertForbidden();
+        $this->actingAs(User::factory()->create(['role' => 'cashier']))
+            ->get(route('settings.store.edit'))
+            ->assertRedirect(route('cashier-dashboard'));
         $admin = User::factory()->create(['role' => 'admin']);
         $this->actingAs($admin)
             ->get(route('settings.store.edit'))
@@ -496,13 +498,40 @@ class ScanAndGoTest extends TestCase
             'current_password' => 'password',
         ])
             ->assertSessionHasNoErrors()
-            ->assertSessionHas('status', 'Company details saved. Verify the new admin email using the link we sent.');
+            ->assertSessionHas('status', 'Settings saved. Verify the new admin email using the link we sent.');
 
         $admin->refresh();
         $this->assertSame('new.admin@gmail.com', $admin->email);
         $this->assertSame('admin', $admin->role);
         $this->assertNull($admin->email_verified_at);
         Notification::assertSentTo($admin, VerifyEmail::class);
+    }
+
+    public function test_admin_can_change_password_from_company_settings_with_current_password(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        $this->actingAs($admin);
+
+        $this->put(route('settings.store.update'), [
+            'store_name' => 'QuickScan Store',
+            'store_address' => '1 Market Street',
+            'admin_email' => $admin->email,
+            'current_password' => 'wrong-password',
+            'new_password' => 'Changed-Secure-Password-2026',
+            'new_password_confirmation' => 'Changed-Secure-Password-2026',
+        ])->assertSessionHasErrors('current_password');
+
+        $this->put(route('settings.store.update'), [
+            'store_name' => 'QuickScan Store',
+            'store_address' => '1 Market Street',
+            'admin_email' => $admin->email,
+            'current_password' => 'password',
+            'new_password' => 'Changed-Secure-Password-2026',
+            'new_password_confirmation' => 'Changed-Secure-Password-2026',
+        ])->assertSessionHasNoErrors()
+            ->assertSessionHas('status', 'Settings saved. Your admin sign-in password has been changed.');
+
+        $this->assertTrue(Hash::check('Changed-Secure-Password-2026', $admin->fresh()->password));
     }
 
     public function test_staff_customer_activity_lists_cart_and_displays_its_live_items(): void

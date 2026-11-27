@@ -12,7 +12,7 @@
         <a href="{{ route('customers.index') }}">Manage Customers</a>
     @else
         <a href="{{ route('login') }}">Log in</a>
-        <a href="{{ route('register') }}">Register</a>
+        <a href="{{ route('login') }}">Sign in</a>
     @endauth
 </body>
 </html>

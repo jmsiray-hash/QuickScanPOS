@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\ProfileUpdateRequest;
+use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -47,6 +48,11 @@ class ProfileController extends Controller
         ]);
 
         $user = $request->user();
+        if ($user->isAdmin() && User::query()->where('role', 'admin')->count() <= 1) {
+            return back()->withErrors([
+                'userDeletion' => 'Create another administrator before deleting this account.',
+            ]);
+        }
 
         Auth::logout();
 

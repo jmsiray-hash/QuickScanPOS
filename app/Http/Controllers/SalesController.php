@@ -150,6 +150,10 @@ class SalesController extends Controller
 
     public function show(Sale $sale): View
     {
+        if (auth()->user()?->role === 'cashier') {
+            abort_unless($sale->user_id === auth()->id(), 403);
+        }
+
         $sale->load(['user', 'customer', 'items', 'voidedBy']);
         $storeSettings = StoreSetting::current();
 

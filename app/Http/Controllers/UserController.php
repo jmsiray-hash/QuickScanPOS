@@ -7,6 +7,8 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Validation\Rule;
+use Illuminate\Validation\Rules\Password;
 use Illuminate\View\View;
 use RuntimeException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -113,12 +115,29 @@ class UserController extends Controller
             'full_name' => ['required', 'string', 'max:100'],
             'email' => ['required', 'email', 'max:255', 'unique:users,email,'.$user->getKey()],
             'avatar' => ['bail', 'nullable', 'mimetypes:image/jpeg,image/png,image/gif,image/webp,image/bmp,image/avif', 'max:2048'],
+            'password' => ['nullable', 'string', 'confirmed', Password::min(12)],
+            'current_password' => [
+                Rule::requiredIf(fn (): bool => $request->user()->is($user) && $request->filled('password')),
+                'current_password',
+            ],
         ], [
             'avatar.mimetypes' => 'Choose a JPEG, PNG, GIF, WebP, BMP, or AVIF image.',
             'avatar.max' => 'The avatar may not be larger than 2 MB.',
         ]);
+        if (! $request->filled('password')) {
+            unset($validated['password']);
+        }
         if ($request->user()->isAdmin()) {
             $validated['role'] = $request->validate(['role' => ['required', 'in:cashier,manager,admin']])['role'];
+            if (
+                $user->isAdmin()
+                && $validated['role'] !== 'admin'
+                && ! User::query()->where('role', 'admin')->where('id', '!=', $user->getKey())->exists()
+            ) {
+                return back()->withInput()->withErrors([
+                    'role' => 'Keep at least one administrator account active.',
+                ]);
+            }
         } elseif ($request->exists('role')) {
             abort(403);
         }
@@ -188,6 +207,12 @@ class UserController extends Controller
 
     public function destroy(User $user): RedirectResponse
     {
+        if ($user->isAdmin() && User::query()->where('role', 'admin')->count() <= 1) {
+            return back()->withErrors([
+                'user' => 'The last administrator account cannot be deleted. Create another admin first.',
+            ]);
+        }
+
         if ($user->shifts()->exists()) {
             return back()->withErrors([
                 'user' => 'This account has shift history and cannot be deleted. Keep it for audit history; change its role if its permissions need to be reduced.',

@@ -262,9 +262,11 @@
             <button type="button" class="tray-action" id="mobile-scan-code">
                 <span aria-hidden="true">⌗</span><span>Scan</span>
             </button>
-            <a class="tray-action tray-action-products" href="{{ route('products.create') }}" aria-label="Register a new product" title="Register a new product">
-                <span aria-hidden="true">＋</span><span>Add product</span>
-            </a>
+            @if (auth()->user()->isAdmin())
+                <a class="tray-action tray-action-products" href="{{ route('products.create') }}" aria-label="Register a new product" title="Register a new product">
+                    <span aria-hidden="true">＋</span><span>Add product</span>
+                </a>
+            @endif
             <button type="button" class="tray-action" data-cashier-view="sales-report">
                 <span aria-hidden="true">₱</span><span>Today's sales</span>
             </button>

@@ -14,7 +14,7 @@ class PosPagesTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->actingAs(User::factory()->create());
+        $this->actingAs(User::factory()->create(['role' => 'admin']));
     }
 
     public function test_home_and_about_pages_load(): void
@@ -75,6 +75,6 @@ class PosPagesTest extends TestCase
         $this->seed(DatabaseSeeder::class);
 
         $this->assertSame(5, Customer::count());
-        $this->assertSame(6, User::count());
+        $this->assertSame(1, User::count());
     }
 }

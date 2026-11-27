@@ -15,7 +15,7 @@ class Tfa7CrudTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->actingAs(User::factory()->create());
+        $this->actingAs(User::factory()->create(['role' => 'admin']));
     }
 
     public function test_customer_can_be_created_from_the_create_page(): void
@@ -87,6 +87,7 @@ class Tfa7CrudTest extends TestCase
             'username' => 'new_user',
             'full_name' => 'New User',
             'email' => 'new-user@example.com',
+            'role' => 'cashier',
             'password' => 'password123',
             'password_confirmation' => 'password123',
         ])->assertRedirect(route('users.index'))
@@ -95,7 +96,58 @@ class Tfa7CrudTest extends TestCase
         $this->assertDatabaseHas('users', [
             'username' => 'new_user',
             'full_name' => 'New User',
+            'role' => 'cashier',
         ]);
+    }
+
+    public function test_admin_can_create_another_administrator(): void
+    {
+        $this->post(route('users.store'), [
+            'username' => 'second_admin',
+            'full_name' => 'Second Admin',
+            'email' => 'second-admin@example.com',
+            'role' => 'admin',
+            'password' => 'password123',
+            'password_confirmation' => 'password123',
+        ])->assertRedirect(route('users.index'));
+
+        $this->assertDatabaseHas('users', [
+            'username' => 'second_admin',
+            'role' => 'admin',
+        ]);
+    }
+
+    public function test_admin_can_reset_another_staff_members_password(): void
+    {
+        $cashier = User::factory()->create(['role' => 'cashier']);
+
+        $this->put(route('users.update', $cashier), [
+            'username' => $cashier->username,
+            'full_name' => $cashier->full_name,
+            'email' => $cashier->email,
+            'role' => 'cashier',
+            'password' => 'New-Cashier-Password-2026',
+            'password_confirmation' => 'New-Cashier-Password-2026',
+        ])->assertRedirect(route('users.index'));
+
+        $this->assertTrue(password_verify('New-Cashier-Password-2026', $cashier->fresh()->password));
+    }
+
+    public function test_last_administrator_cannot_be_demoted_or_deleted(): void
+    {
+        $admin = auth()->user();
+
+        $this->put(route('users.update', $admin), [
+            'username' => $admin->username,
+            'full_name' => $admin->full_name,
+            'email' => $admin->email,
+            'role' => 'cashier',
+        ])->assertSessionHasErrors('role');
+
+        $this->delete(route('users.destroy', $admin))
+            ->assertSessionHasErrors('user');
+
+        $this->assertSame('admin', $admin->fresh()->role);
     }
 
     public function test_user_validation_requires_fields_and_a_unique_username(): void
@@ -144,6 +196,7 @@ class Tfa7CrudTest extends TestCase
             'username' => 'edit_user',
             'full_name' => 'After Update',
             'email' => 'edit@example.com',
+            'role' => 'cashier',
         ])->assertRedirect(route('users.index'))
             ->assertSessionHas('status');
 
@@ -167,6 +220,7 @@ class Tfa7CrudTest extends TestCase
             'username' => 'avatar_user',
             'full_name' => 'Avatar User',
             'email' => 'avatar@example.com',
+            'role' => 'cashier',
             'avatar' => UploadedFile::fake()->image('portrait.png', 500, 300),
         ])->assertRedirect(route('users.index'));
 
@@ -207,6 +261,7 @@ class Tfa7CrudTest extends TestCase
             'username' => 'new_avatar_user',
             'full_name' => 'New Avatar User',
             'email' => 'new-avatar@example.com',
+            'role' => 'cashier',
             'password' => 'password123',
             'password_confirmation' => 'password123',
             'avatar' => UploadedFile::fake()->image('portrait.png', 120, 120),
@@ -234,6 +289,7 @@ class Tfa7CrudTest extends TestCase
             'username' => 'jpeg_avatar_user',
             'full_name' => 'JPEG Avatar User',
             'email' => 'jpeg-avatar@example.com',
+            'role' => 'cashier',
             'avatar' => UploadedFile::fake()->image('portrait.jpg', 320, 240),
         ])->assertRedirect(route('users.index'));
 
