@@ -144,6 +144,7 @@ class SalesAndInventoryTest extends TestCase
         ->assertOk()
         ->assertSee('Cashier dashboard')
         ->assertSee('Start order')
+        ->assertSee('.catalog-view-switch { display:none; }', false)
         ->assertSee("Today's sales", false)
         ->assertSee('Current sale')
         ->assertSee('Apply discount')
@@ -417,6 +418,8 @@ class SalesAndInventoryTest extends TestCase
         $this->get(route('cashier-dashboard'))
             ->assertOk()
             ->assertSee('End Shift')
+            ->assertSee('cashier-settings-menu', false)
+            ->assertSee('Open cashier settings')
             ->assertSee('end-shift-dialog', false)
             ->assertSee('End Shift &amp; Save Z-Reading', false);
 

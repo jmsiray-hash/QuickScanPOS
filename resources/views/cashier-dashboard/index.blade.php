@@ -26,21 +26,28 @@
                     <span class="report-quick-icon" aria-hidden="true">◉</span>
                     <span>Customer carts</span>
                 </a>
-                @if (auth()->user()->isAdmin())
-                    <a class="report-quick-link" href="{{ route('settings.store.edit') }}">
-                        <span class="report-quick-icon" aria-hidden="true">⚙</span>
-                        <span>Settings</span>
-                    </a>
-                @endif
-                <div class="cashier-shift-actions">
-                    <div class="cashier-shift-state {{ $activeShift ? 'is-open' : 'is-closed' }}">
-                        <span class="shift-dot"></span>
-                        {{ $activeShift ? 'SHIFT OPEN' : 'SHIFT NOT OPEN' }}
+                <details class="cashier-settings-menu">
+                    <summary aria-label="Open cashier settings" title="Settings">
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M12 15.25A3.25 3.25 0 1 0 12 8.75a3.25 3.25 0 0 0 0 6.5Z"/>
+                            <path d="M19.43 15a1.65 1.65 0 0 0 .33 1.82l.06.06-1.91 1.91-.06-.06A1.65 1.65 0 0 0 16 18.39a1.65 1.65 0 0 0-1 .61V19.2h-2.7v-.2a1.65 1.65 0 0 0-1-.61 1.65 1.65 0 0 0-1.82.33l-.06.06-1.91-1.91.06-.06A1.65 1.65 0 0 0 7.91 15a1.65 1.65 0 0 0-.61-1H7.1v-2.7h.2a1.65 1.65 0 0 0 .61-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06L9.43 6.5l.06.06A1.65 1.65 0 0 0 11.31 6a1.65 1.65 0 0 0 1-.61V5.2H15v.19a1.65 1.65 0 0 0 1 .61 1.65 1.65 0 0 0 1.82-.33l.06-.06 1.91 1.91-.06.06A1.65 1.65 0 0 0 19.39 9c.14.4.37.76.61 1h.2v2.7H20a1.65 1.65 0 0 0-.57 1Z"/>
+                        </svg>
+                    </summary>
+                    <div class="cashier-settings-panel">
+                        <div class="cashier-shift-state {{ $activeShift ? 'is-open' : 'is-closed' }}">
+                            <span class="shift-dot"></span>
+                            {{ $activeShift ? 'SHIFT OPEN' : 'SHIFT NOT OPEN' }}
+                        </div>
+                        @if ($activeShift)
+                            <button id="end-shift-button" class="end-shift-menu-button" type="button">End Shift</button>
+                        @else
+                            <button class="open-shift-menu-button" type="button" data-focus-open-shift>Open Shift</button>
+                        @endif
+                        @if (auth()->user()->isAdmin())
+                            <a class="store-settings-menu-link" href="{{ route('settings.store.edit') }}">Store Settings</a>
+                        @endif
                     </div>
-                    @if ($activeShift)
-                        <button id="end-shift-button" class="end-shift-button" type="button">End Shift</button>
-                    @endif
-                </div>
+                </details>
             </div>
         </header>
 
@@ -741,7 +748,10 @@
             const endShiftDialog = document.getElementById('end-shift-dialog');
             const endShiftButton = document.getElementById('end-shift-button');
             if (endShiftDialog && endShiftButton) {
-                endShiftButton.addEventListener('click', () => endShiftDialog.showModal());
+                endShiftButton.addEventListener('click', () => {
+                    endShiftButton.closest('details')?.removeAttribute('open');
+                    endShiftDialog.showModal();
+                });
                 document.getElementById('cancel-end-shift').addEventListener('click', () => endShiftDialog.close());
                 endShiftDialog.addEventListener('click', event => {
                     if (event.target === endShiftDialog) endShiftDialog.close();
@@ -750,6 +760,12 @@
                     endShiftDialog.showModal();
                 @endif
             }
+            document.querySelectorAll('[data-focus-open-shift]').forEach(button => {
+                button.addEventListener('click', () => {
+                    button.closest('details')?.removeAttribute('open');
+                    document.getElementById('cashier-opening-fund')?.focus();
+                });
+            });
 
             document.querySelectorAll('[data-cashier-view]').forEach(button => {
                 button.addEventListener('click', () => showCashierView(button.dataset.cashierView));
@@ -847,9 +863,19 @@
         .cashier-shift-state { align-items:center; border:1px solid #334155; border-radius:999px; display:flex; font-size:.63rem; font-weight:800; gap:7px; padding:7px 11px; }
         .cashier-shift-state.is-open { background:#0f2c2d; border-color:#115e59; color:#99f6e4; }
         .cashier-shift-state.is-closed { background:#34251d; border-color:#854d0e; color:#fde68a; }
-        .cashier-shift-actions { align-items:center; display:flex; gap:7px; }
-        .end-shift-button { background:#35231f; border:1px solid #805044; border-radius:999px; color:#ffd0c3; cursor:pointer; font:inherit; font-size:.62rem; font-weight:800; padding:8px 11px; }
-        .end-shift-button:hover { background:#4a2d27; border-color:#b56a58; }
+        .cashier-settings-menu { position:relative; }
+        .cashier-settings-menu summary { align-items:center; background:linear-gradient(135deg,#132935,#10212c); border:1px solid #294253; border-radius:9px; cursor:pointer; display:flex; height:34px; justify-content:center; list-style:none; width:36px; }
+        .cashier-settings-menu summary::-webkit-details-marker { display:none; }
+        .cashier-settings-menu summary:hover,.cashier-settings-menu[open] summary { background:#1c3943; border-color:#27b9a7; }
+        .cashier-settings-menu summary svg { fill:none; height:19px; stroke:#9cead9; stroke-linecap:round; stroke-linejoin:round; stroke-width:1.8; width:19px; }
+        .cashier-settings-panel { background:#13232f; border:1px solid #385164; border-radius:9px; box-shadow:0 14px 32px rgba(0,0,0,.38); display:grid; gap:7px; min-width:180px; padding:8px; position:absolute; right:0; top:42px; z-index:20; }
+        .cashier-settings-panel .cashier-shift-state { justify-content:center; border-radius:7px; }
+        .end-shift-menu-button,.open-shift-menu-button,.store-settings-menu-link { border-radius:7px; cursor:pointer; font:inherit; font-size:.68rem; font-weight:800; padding:8px 10px; text-align:center; text-decoration:none; }
+        .end-shift-menu-button { background:#35231f; border:1px solid #805044; color:#ffd0c3; }
+        .end-shift-menu-button:hover { background:#4a2d27; border-color:#b56a58; }
+        .open-shift-menu-button { background:#103b38; border:1px solid #1a7267; color:#b8f4df; }
+        .store-settings-menu-link { background:#1a303d; border:1px solid #385264; color:#d9e7ed; }
+        .store-settings-menu-link:hover { background:#254451; }
         .shift-dot { background:#34d399; border-radius:50%; height:8px; width:8px; }
         .is-closed .shift-dot { background:#f59e0b; }
         .shift-open-form { align-items:center; background:#172a38; border:1px solid #385366; border-radius:8px; display:flex; flex:none; flex-wrap:wrap; gap:8px; margin-bottom:8px; padding:7px 10px; }
@@ -879,7 +905,7 @@
         .catalog-pane { display:flex; flex-direction:column; overflow:hidden; padding:14px; }
         .catalog-view { display:flex; flex:1; flex-direction:column; min-height:0; }
         .catalog-view[hidden],.scan-report-view[hidden],.sales-report-view[hidden] { display:none; }
-        .catalog-view-switch { align-items:center; border-bottom:1px solid #253a49; display:flex; flex:none; gap:6px; margin:-2px 0 12px; padding-bottom:10px; }
+        .catalog-view-switch { display:none; }
         .catalog-view-tab { align-items:center; background:transparent; border:1px solid transparent; border-radius:7px; color:#9eafbc; cursor:pointer; display:inline-flex; font:inherit; font-size:.76rem; gap:8px; padding:8px 11px; transition:background .18s,color .18s,border-color .18s; }
         .catalog-view-tab:hover { background:#1a2c39; color:#eaf4f5; }
         .catalog-view-tab.is-active { background:#0e3938; border-color:#176d65; color:#baffed; }
