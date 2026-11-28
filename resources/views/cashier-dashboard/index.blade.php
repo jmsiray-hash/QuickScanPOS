@@ -18,41 +18,6 @@
                         Shift started {{ $activeShift->opened_at->format('M j, g:i A') }} · Opening fund ₱{{ number_format($activeShift->opening_cash, 2) }}
                     </span>
                 @endif
-                <time class="cashier-clock" id="cashier-clock"></time>
-                <button type="button" class="report-quick-link" data-cashier-view="sales-report">
-                    <span class="report-quick-icon" aria-hidden="true">₱</span>
-                    <span>Today's sales <strong id="header-sales-total">₱0.00</strong></span>
-                </button>
-                <button type="button" class="report-quick-link" data-cashier-view="scan-report">
-                    <span class="report-quick-icon" aria-hidden="true">⌁</span>
-                    <span>Customer scans <strong id="header-scan-count">{{ $todayScanCount }}</strong></span>
-                </button>
-                <a class="report-quick-link" href="{{ route('customer-activity.index') }}">
-                    <span class="report-quick-icon" aria-hidden="true">◉</span>
-                    <span>Customer carts</span>
-                </a>
-                <details class="cashier-settings-menu">
-                    <summary aria-label="Open cashier settings" title="Settings">
-                        <svg viewBox="0 0 24 24" aria-hidden="true">
-                            <path d="M12 15.25A3.25 3.25 0 1 0 12 8.75a3.25 3.25 0 0 0 0 6.5Z"/>
-                            <path d="M19.43 15a1.65 1.65 0 0 0 .33 1.82l.06.06-1.91 1.91-.06-.06A1.65 1.65 0 0 0 16 18.39a1.65 1.65 0 0 0-1 .61V19.2h-2.7v-.2a1.65 1.65 0 0 0-1-.61 1.65 1.65 0 0 0-1.82.33l-.06.06-1.91-1.91.06-.06A1.65 1.65 0 0 0 7.91 15a1.65 1.65 0 0 0-.61-1H7.1v-2.7h.2a1.65 1.65 0 0 0 .61-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06L9.43 6.5l.06.06A1.65 1.65 0 0 0 11.31 6a1.65 1.65 0 0 0 1-.61V5.2H15v.19a1.65 1.65 0 0 0 1 .61 1.65 1.65 0 0 0 1.82-.33l.06-.06 1.91 1.91-.06.06A1.65 1.65 0 0 0 19.39 9c.14.4.37.76.61 1h.2v2.7H20a1.65 1.65 0 0 0-.57 1Z"/>
-                        </svg>
-                    </summary>
-                    <div class="cashier-settings-panel">
-                        <div class="cashier-shift-state {{ $activeShift ? 'is-open' : 'is-closed' }}">
-                            <span class="shift-dot"></span>
-                            {{ $activeShift ? 'SHIFT OPEN' : 'SHIFT NOT OPEN' }}
-                        </div>
-                        @if ($activeShift)
-                            <button id="end-shift-button" class="end-shift-menu-button" type="button">End Shift</button>
-                        @else
-                            <button class="open-shift-menu-button" type="button" data-focus-open-shift>Open Shift</button>
-                        @endif
-                        @if (auth()->user()->isAdmin())
-                            <a class="store-settings-menu-link" href="{{ route('settings.store.edit') }}">Store Settings</a>
-                        @endif
-                    </div>
-                </details>
             </div>
         </header>
 
@@ -268,14 +233,41 @@
                 </a>
             @endif
             <button type="button" class="tray-action" data-cashier-view="sales-report">
-                <span aria-hidden="true">₱</span><span>Today's sales</span>
+                <span aria-hidden="true">₱</span><span>Today's sales <strong id="header-sales-total">₱0.00</strong></span>
             </button>
-            <a class="tray-action" href="{{ route('ratings.index') }}">
-                <span aria-hidden="true">★</span><span>Ratings</span>
-            </a>
-            <a class="tray-action" href="{{ route('customer-activity.index') }}">
-                <span aria-hidden="true">◉</span><span>Customer carts</span>
-            </a>
+            <button type="button" class="tray-action" data-cashier-view="scan-report">
+                <span aria-hidden="true">⌁</span><span>Customer scans <strong id="header-scan-count">{{ $todayScanCount }}</strong></span>
+            </button>
+            @if (auth()->user()->role !== 'cashier')
+                <a class="tray-action" href="{{ route('ratings.index') }}">
+                    <span aria-hidden="true">★</span><span>Ratings</span>
+                </a>
+                <a class="tray-action" href="{{ route('customer-activity.index') }}">
+                    <span aria-hidden="true">◉</span><span>Customer carts</span>
+                </a>
+            @endif
+            <details class="cashier-settings-menu">
+                <summary aria-label="Open cashier settings" title="Settings">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M12 15.25A3.25 3.25 0 1 0 12 8.75a3.25 3.25 0 0 0 0 6.5Z"/>
+                        <path d="M19.43 15a1.65 1.65 0 0 0 .33 1.82l.06.06-1.91 1.91-.06-.06A1.65 1.65 0 0 0 16 18.39a1.65 1.65 0 0 0-1 .61V19.2h-2.7v-.2a1.65 1.65 0 0 0-1-.61 1.65 1.65 0 0 0-1.82.33l-.06.06-1.91-1.91.06-.06A1.65 1.65 0 0 0 7.91 15a1.65 1.65 0 0 0-.61-1H7.1v-2.7h.2a1.65 1.65 0 0 0 .61-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06L9.43 6.5l.06.06A1.65 1.65 0 0 0 11.31 6a1.65 1.65 0 0 0 1-.61V5.2H15v.19a1.65 1.65 0 0 0 1 .61 1.65 1.65 0 0 0 1.82-.33l.06-.06 1.91 1.91-.06.06A1.65 1.65 0 0 0 19.39 9c.14.4.37.76.61 1h.2v2.7H20a1.65 1.65 0 0 0-.57 1Z"/>
+                    </svg>
+                </summary>
+                <div class="cashier-settings-panel">
+                    <div class="cashier-shift-state {{ $activeShift ? 'is-open' : 'is-closed' }}">
+                        <span class="shift-dot"></span>
+                        {{ $activeShift ? 'SHIFT OPEN' : 'SHIFT NOT OPEN' }}
+                    </div>
+                    @if ($activeShift)
+                        <button id="end-shift-button" class="end-shift-menu-button" type="button">End Shift</button>
+                    @else
+                        <button class="open-shift-menu-button" type="button" data-focus-open-shift>Open Shift</button>
+                    @endif
+                    @if (auth()->user()->isAdmin())
+                        <a class="store-settings-menu-link" href="{{ route('settings.store.edit') }}">Store Settings</a>
+                    @endif
+                </div>
+            </details>
         </nav>
 
         <dialog id="clear-cart-dialog" class="clear-cart-dialog" aria-labelledby="clear-cart-title">
@@ -1313,14 +1305,6 @@
                     }
                 });
             }
-            function updateClock() {
-                const now = new Date();
-                document.getElementById('cashier-clock').textContent = new Intl.DateTimeFormat(undefined, {
-                    weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
-                }).format(now);
-            }
-            updateClock();
-            window.setInterval(updateClock, 30000);
             document.getElementById('refresh-sales-report').addEventListener('click', () => refreshActiveReport());
             document.getElementById('sales-report-date').addEventListener('change', () => refreshActiveReport());
             renderScanReports(scanReports, {{ $todayScanCount }});
@@ -1356,11 +1340,6 @@
         .cashier-topbar h1 { color:#f8fafc; font-size:1.2rem; letter-spacing:-.035em; margin:0; }
         .cashier-topbar-actions { align-items:center; display:flex; flex:none; gap:6px; white-space:nowrap; }
         .shift-open-inline { color:#8edbc9; font-size:.62rem; font-variant-numeric:tabular-nums; white-space:nowrap; }
-        .cashier-clock { color:#8ea1b1; font-size:.65rem; font-variant-numeric:tabular-nums; white-space:nowrap; }
-        .report-quick-link { align-items:center; background:linear-gradient(135deg,#132935,#10212c); border:1px solid #294253; border-radius:9px; color:#c7d7e2; cursor:pointer; display:flex; font:inherit; font-size:.76rem; gap:8px; padding:8px 11px; text-decoration:none; transition:border-color .18s,transform .18s; }
-        .report-quick-link:hover { border-color:#27b9a7; transform:translateY(-1px); }
-        .report-quick-link strong { background:#0d645b; border-radius:999px; color:#d5fff3; margin-left:3px; min-width:20px; padding:2px 6px; }
-        .report-quick-icon { color:#5eead4; font-size:1.1rem; }
         .cashier-shift-state { align-items:center; border:1px solid #334155; border-radius:999px; display:flex; font-size:.63rem; font-weight:800; gap:7px; padding:7px 11px; }
         .cashier-shift-state.is-open { background:#0f2c2d; border-color:#115e59; color:#99f6e4; }
         .cashier-shift-state.is-closed { background:#34251d; border-color:#854d0e; color:#fde68a; }
@@ -1369,7 +1348,7 @@
         .cashier-settings-menu summary::-webkit-details-marker { display:none; }
         .cashier-settings-menu summary:hover,.cashier-settings-menu[open] summary { background:#1c3943; border-color:#27b9a7; }
         .cashier-settings-menu summary svg { fill:none; height:19px; stroke:#9cead9; stroke-linecap:round; stroke-linejoin:round; stroke-width:1.8; width:19px; }
-        .cashier-settings-panel { background:#13232f; border:1px solid #385164; border-radius:9px; box-shadow:0 14px 32px rgba(0,0,0,.38); display:grid; gap:7px; min-width:180px; padding:8px; position:absolute; right:0; top:42px; z-index:20; }
+        .cashier-settings-panel { background:#13232f; border:1px solid #385164; border-radius:9px; bottom:42px; box-shadow:0 14px 32px rgba(0,0,0,.38); display:grid; gap:7px; min-width:180px; padding:8px; position:absolute; right:0; z-index:20; }
         .cashier-settings-panel .cashier-shift-state { justify-content:center; border-radius:7px; }
         .end-shift-menu-button,.open-shift-menu-button,.store-settings-menu-link { border-radius:7px; cursor:pointer; font:inherit; font-size:.68rem; font-weight:800; padding:8px 10px; text-align:center; text-decoration:none; }
         .end-shift-menu-button { background:#35231f; border:1px solid #805044; color:#ffd0c3; }
@@ -1667,7 +1646,6 @@
             .cashier-topbar { margin-bottom:4px; min-height:36px; }
             .cashier-topbar h1 { font-size:1.15rem; }
             .cashier-topbar-actions { gap:5px; }
-            .report-quick-link { padding:5px 7px; }
             .cashier-action-tray { margin-top:6px; }
             .catalog-pane,.cart-pane { padding:8px; }
             .catalog-product-image { height:72px; }
@@ -1721,15 +1699,16 @@
             .cashier-app-main { padding:0; }
             .cashier-topbar { flex-wrap:wrap; }
             .cashier-topbar-actions { flex-wrap:wrap; justify-content:flex-start; }
-            .report-quick-link { font-size:.61rem; }
-            .cashier-clock { display:none; }
             .catalog-view-switch { overflow-x:auto; }
             .catalog-view-tab { flex:none; }
             .cashier-action-tray { bottom:0; justify-content:space-around; margin:8px -2px 0; position:sticky; z-index:5; }
-            .tray-action { flex:1; min-width:0; padding:7px 2px; }
+            .cashier-action-tray { justify-content:flex-start; overflow-x:auto; }
+            .tray-action { flex:0 0 68px; min-width:68px; padding:7px 2px; }
             .tray-action span:last-child { font-size:.57rem; }
             .tray-action-products { flex:0 0 34px; min-width:34px; }
             .tray-action-products>span:last-child { display:none; }
+            .cashier-action-tray .cashier-settings-menu { flex:none; }
+            .cashier-action-tray .cashier-settings-panel { bottom:42px; position:fixed; right:10px; }
             .sales-transaction-row { grid-template-columns:31px minmax(0,1fr) auto 60px 24px; }
             .sales-method { display:none; }
             .scan-report-actions { align-items:flex-end; flex-direction:column-reverse; }
@@ -1738,8 +1717,7 @@
             .customer-qr-frame { height:58%; width:72%; }
         }
         @media(prefers-reduced-motion:reduce) {
-            .catalog-product,.catalog-product-image img,.add-product-button,.catalog-view-tab,.report-quick-link { transition:none; }
-            .catalog-product:hover,.report-quick-link:hover { transform:none; }
+            .catalog-product,.catalog-product-image img,.add-product-button,.catalog-view-tab { transition:none; }
         }
     </style>
 @endsection

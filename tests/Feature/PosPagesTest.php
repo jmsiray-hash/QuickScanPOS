@@ -38,6 +38,52 @@ class PosPagesTest extends TestCase
             );
     }
 
+    public function test_cashier_dashboard_hides_customer_activity_shortcuts_only_for_cashiers(): void
+    {
+        $cashier = User::factory()->create(['role' => 'cashier']);
+
+        $this->actingAs($cashier)
+            ->get(route('cashier-dashboard'))
+            ->assertOk()
+            ->assertDontSee('Customer carts')
+            ->assertDontSee('Ratings')
+            ->assertDontSee(route('customer-activity.index'), false)
+            ->assertDontSee(route('ratings.index'), false)
+            ->assertDontSee('id="cashier-clock"', false)
+            ->assertDontSee('function updateClock()', false);
+
+        $this->actingAs(User::factory()->create(['role' => 'admin']))
+            ->get(route('cashier-dashboard'))
+            ->assertOk()
+            ->assertSee('Customer carts')
+            ->assertSee('Ratings')
+            ->assertSee(route('customer-activity.index'), false)
+            ->assertSee(route('ratings.index'), false);
+    }
+
+    public function test_cashier_header_shortcuts_are_in_the_bottom_action_tray(): void
+    {
+        $response = $this->get(route('cashier-dashboard'))->assertOk();
+        $html = $response->getContent();
+        $trayStart = strpos($html, '<nav class="cashier-action-tray"');
+        $trayEnd = $trayStart === false ? false : strpos($html, '</nav>', $trayStart);
+
+        $this->assertNotFalse($trayStart);
+        $this->assertNotFalse($trayEnd);
+
+        foreach ([
+            'data-cashier-view="sales-report"',
+            'data-cashier-view="scan-report"',
+            'class="cashier-settings-menu"',
+        ] as $shortcut) {
+            $position = strpos($html, $shortcut, $trayStart);
+            $this->assertNotFalse($position, $shortcut.' should be in the bottom action tray.');
+            $this->assertLessThan($trayEnd, $position, $shortcut.' should be in the bottom action tray.');
+        }
+
+        $this->assertStringNotContainsString('class="report-quick-link"', $html);
+    }
+
     public function test_legacy_pos_entry_redirects_to_the_primary_cashier_register(): void
     {
         $this->get(route('pos.index'))
