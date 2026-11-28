@@ -135,18 +135,16 @@ composer test
 
 Before submission, verify that a logged-out visitor is redirected to `/login`, while a logged-in user can use all customer and user CRUD pages.
 
-## Submission Links
-
-### GitHub Repository
-
-Replace this section with the repository URL.
 
 ### Hosted Application
 
-Replace this section with the live application URL.
 
-## Student Information
+## Students Information
 
 - Name: Juraly Siray
+-  Brent Eshed Basilio
+-  Mark Lito Cargo
+-  Enzo Joshua Torculas
+  
 - Section: BSIT-DW31-1
 - Professor: Tio, Rene Christopher
