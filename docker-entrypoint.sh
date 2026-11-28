@@ -9,6 +9,11 @@ case "$PORT" in
         ;;
 esac
 
+if [ "${RUN_REVERB_SERVER:-false}" = true ]; then
+    cd /var/www/html
+    exec php artisan reverb:start --host=0.0.0.0 --port="$PORT"
+fi
+
 sed -ri "s/^Listen 80$/Listen ${PORT}/" /etc/apache2/ports.conf
 sed -ri "s/<VirtualHost \\*:80>/<VirtualHost *:${PORT}>/" /etc/apache2/sites-available/000-default.conf
 
@@ -99,8 +104,8 @@ case "$DB_CONNECTION" in
 esac
 
 mkdir -p storage/app/public/products storage/app/public/avatars
-chown -R www-data:www-data storage/app/public
-chmod -R 775 storage/app/public
+chown www-data:www-data storage/app/public storage/app/public/products storage/app/public/avatars
+chmod 775 storage/app/public storage/app/public/products storage/app/public/avatars
 
 php artisan config:clear
 php artisan config:cache

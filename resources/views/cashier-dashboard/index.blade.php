@@ -123,7 +123,7 @@
                         <article class="catalog-product">
                             <div class="catalog-product-image">
                                 @if ($product->image_path)
-                                    <img src="{{ route('products.image', $product) }}" alt="{{ $product->name }}" loading="lazy"
+                                    <img src="{{ route('products.image', $product) }}?v={{ hash('sha256', $product->image_path) }}" alt="{{ $product->name }}" loading="lazy" decoding="async"
                                          onerror="this.onerror=null;this.replaceWith(Object.assign(document.createElement('span'),{textContent:'No photo'}));">
                                 @else
                                     <span class="product-placeholder" aria-hidden="true">{{ mb_strtoupper(mb_substr($product->name, 0, 1)) }}</span>
@@ -343,6 +343,7 @@
                     <p class="shift-required-note">Open your shift to enable payment.</p>
                 @endunless
                 <p id="payment-error" class="payment-error" role="alert" hidden></p>
+                <p id="payment-success" class="payment-success" role="status" hidden></p>
                 <button id="complete-sale" class="complete-sale-button" type="button" @disabled(!$activeShift)>
                     Complete payment · ₱<span id="payment-total">0.00</span>
                 </button>
@@ -421,6 +422,7 @@
             let paymentMethod = 'cash';
             let paymentRefreshInProgress = false;
             let submitting = false;
+            let completedSale = null;
 
             const money = value => '₱' + Number(value || 0).toFixed(2);
             const amount = value => Number.isFinite(Number(value)) ? Number(value) : null;
@@ -665,7 +667,7 @@
                     reportPollTimer = null;
                     await refreshActiveReport();
                     scheduleReportRefresh();
-                }, 1000);
+                }, window.Echo ? 15000 : 1000);
             }
             function showCashierView(viewName) {
                 activeCashierView = viewName;
@@ -688,6 +690,24 @@
                 if (showReport || showSales) refreshActiveReport();
                 scheduleReportRefresh();
             }
+            let inventoryRefreshPending = false;
+            window.Echo?.private('pos-sync').listen('.pos.sync', event => {
+                if (
+                    activeCashierView === 'scan-report'
+                    && ['cart', 'scan'].includes(event.resource)
+                ) refreshActiveReport();
+                if (
+                    activeCashierView === 'sales-report'
+                    && ['sale', 'shift'].includes(event.resource)
+                ) refreshActiveReport();
+                if (event.resource === 'product') {
+                    if (paymentDialog.open) inventoryRefreshPending = true;
+                    else window.location.reload();
+                }
+            });
+            paymentDialog.addEventListener('close', () => {
+                if (inventoryRefreshPending) window.location.reload();
+            });
             function paymentTotals() {
                 const items = Array.isArray(cart?.items) ? cart.items : [];
                 if (!items.length) return { subtotal: 0, total: 0, discount: 0, tax: 0 };
@@ -734,6 +754,26 @@
             function updatePaymentState() {
                 const totals = paymentTotals();
                 const due = totals.total;
+                const button = document.getElementById('complete-sale');
+                if (completedSale) {
+                    document.getElementById('payment-dialog-total').textContent = money(completedSale.receipt.total);
+                    document.getElementById('payment-dialog-subtotal').textContent = money(completedSale.receipt.subtotal);
+                    document.getElementById('payment-dialog-discount').textContent = '−' + money(completedSale.receipt.discount);
+                    document.getElementById('payment-dialog-tax').textContent = money(completedSale.receipt.tax);
+                    document.getElementById('payment-dialog-title').textContent = 'Payment complete';
+                    document.querySelector('.payment-options').hidden = true;
+                    document.getElementById('cash-payment-fields').hidden = true;
+                    document.getElementById('wallet-payment-fields').hidden = true;
+                    document.getElementById('payment-error').hidden = true;
+                    document.getElementById('payment-success').textContent =
+                        `Sale #${completedSale.sale_id} · Paid ${money(completedSale.receipt.total)} by ${completedSale.receipt.payment_method.toUpperCase()}.`;
+                    document.getElementById('payment-success').hidden = false;
+                    button.disabled = false;
+                    button.textContent = 'Print receipt';
+                    button.setAttribute('aria-busy', 'false');
+                    document.getElementById('payment-empty-message').hidden = true;
+                    return;
+                }
                 const cash = Number(document.getElementById('cash-received').value || 0);
                 const discountType = document.getElementById('discount-type').value;
                 const discountId = document.getElementById('discount-id').value.trim();
@@ -745,14 +785,14 @@
                 const ready = paymentMethod === 'cash'
                     ? cash >= due && due > 0
                     : (!['gcash', 'maya'].includes(paymentMethod) || document.getElementById('payment-reference').value.trim() !== '');
-                document.getElementById('complete-sale').disabled =
+                button.disabled =
                     !hasOpenShift || !cart?.items?.length || !ready
                     || (discountType !== '' && (!discountId || !hasEligibleItems))
                     || submitting || paymentRefreshInProgress;
-                document.getElementById('complete-sale').textContent = paymentRefreshInProgress
+                button.textContent = paymentRefreshInProgress
                     ? 'Refreshing cart…'
                     : (submitting ? 'Processing payment…' : 'Complete payment · ₱' + due.toFixed(2));
-                document.getElementById('complete-sale').setAttribute('aria-busy', String(submitting));
+                button.setAttribute('aria-busy', String(submitting));
                 document.getElementById('payment-empty-message').hidden = Boolean(cart?.items?.length);
                 document.getElementById('discount-id').disabled = discountType === '' || !hasEligibleItems;
                 document.getElementById('discount-id').placeholder = hasEligibleItems
@@ -761,6 +801,14 @@
             }
             function renderCart(nextCart) {
                 cart = nextCart;
+                if (completedSale && cart.items?.length) {
+                    completedSale = null;
+                    document.getElementById('payment-dialog-title').textContent = 'Choose payment method';
+                    document.querySelector('.payment-options').hidden = false;
+                    document.getElementById('cash-payment-fields').hidden = paymentMethod !== 'cash';
+                    document.getElementById('wallet-payment-fields').hidden = !['gcash', 'maya'].includes(paymentMethod);
+                    document.getElementById('payment-success').hidden = true;
+                }
                 const items = cart.items || [];
                 emptyState.hidden = items.length > 0;
                 cartLines.hidden = items.length === 0;
@@ -1122,6 +1170,7 @@
                 });
             });
             document.getElementById('cash-received').addEventListener('input', updatePaymentState);
+            document.getElementById('cash-received').addEventListener('change', updatePaymentState);
             document.getElementById('payment-reference').addEventListener('input', updatePaymentState);
             openPaymentDialogButton.addEventListener('click', async () => {
                 if (paymentDialog.open) return;
@@ -1141,16 +1190,23 @@
                     updatePaymentState();
                 }
             });
+            function printReceipt(receiptUrl) {
+                const receipt = new URL(receiptUrl);
+                receipt.searchParams.set('print', '1');
+                window.open(receipt.toString(), '_blank', 'noopener');
+            }
             document.getElementById('print-sale-receipt').addEventListener('click', () => {
-                const receiptUrl = new URL(document.getElementById('sale-receipt-link').href);
-                receiptUrl.searchParams.set('print', '1');
-                window.open(receiptUrl.toString(), '_blank', 'noopener');
+                printReceipt(document.getElementById('sale-receipt-link').href);
             });
             document.getElementById('close-payment-dialog').addEventListener('click', () => paymentDialog.close());
             paymentDialog.addEventListener('click', event => {
                 if (event.target === paymentDialog) paymentDialog.close();
             });
             document.getElementById('complete-sale').addEventListener('click', async () => {
+                if (completedSale) {
+                    printReceipt(completedSale.receipt_url);
+                    return;
+                }
                 if (submitting) return;
                 submitting = true;
                 updatePaymentState();
@@ -1164,12 +1220,10 @@
                         special_discount_type: document.getElementById('discount-type').value || null,
                         special_discount_id_number: document.getElementById('discount-id').value.trim() || null,
                     });
-                    renderCart(result.cart);
-                    document.getElementById('sale-complete-message').textContent = `Sale #${result.sale_id} · Paid ${money(result.receipt.total)} by ${paymentMethod.toUpperCase()}.`;
+                    completedSale = result;
                     document.getElementById('sale-receipt-link').href = result.receipt_url;
                     document.getElementById('sale-receipt-link').textContent = 'View / Print Receipt';
-                    paymentDialog.close();
-                    document.getElementById('sale-complete-dialog').showModal();
+                    renderCart(result.cart);
                     document.getElementById('cash-received').value = '';
                     document.getElementById('payment-reference').value = '';
                     document.getElementById('discount-type').value = '';

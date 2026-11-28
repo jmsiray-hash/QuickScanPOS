@@ -245,7 +245,8 @@ class Tfa7CrudTest extends TestCase
 
         $this->get(route('users.avatar', $user))
             ->assertOk()
-            ->assertHeader('Content-Type', 'image/png');
+            ->assertHeader('Content-Type', 'image/png')
+            ->assertHeader('Cache-Control', 'immutable, max-age=31536000, private');
     }
 
     public function test_user_creation_saves_avatar_path_to_database_and_image_to_public_storage(): void

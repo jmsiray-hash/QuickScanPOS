@@ -31,7 +31,7 @@
     <input id="product-image" name="image" type="file" accept="image/jpeg,image/png,image/webp">
     <p class="field-hint">JPEG, PNG, or WebP; up to 5 MB. You can upload it here or capture it with the connected phone.</p>
     <div id="product-image-preview-wrap" @if(!$product->image_path) hidden @endif>
-        <img id="product-image-preview" class="product-image-preview" src="{{ $product->image_path ? route('products.image', $product) : '' }}" alt="Product photo preview" onerror="this.onerror=null;this.style.display='none';">
+        <img id="product-image-preview" class="product-image-preview"         src="{{ $product->image_path ? route('products.image', $product).'?v='.hash('sha256', $product->image_path) : '' }}" alt="Product photo preview" onerror="this.onerror=null;this.style.display='none';">
     </div>
 </div>
 <div class="field"><label for="cost_price">Cost price</label><input id="cost_price" name="cost_price" type="number" step="0.01" min="0" value="{{ old('cost_price', $product->cost_price) }}" required></div>

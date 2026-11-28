@@ -43,6 +43,10 @@ class RestrictStaffToCashierRegister
             return $next($request);
         }
 
+        if ($request->is('broadcasting/auth')) {
+            return $next($request);
+        }
+
         if (str_starts_with((string) $routeName, 'users.')) {
             if ($user->role === 'cashier' && $request->isMethod('GET') && ! $request->expectsJson()) {
                 return to_route('cashier-dashboard');

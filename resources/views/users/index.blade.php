@@ -28,10 +28,12 @@
                         <td>
                             <img
                                 class="avatar"
-                                src="{{ $user->avatar ? route('users.avatar', $user) : asset('images/avatar-placeholder.svg') }}"
+                                src="{{ $user->avatar ? route('users.avatar', $user).'?v='.hash('sha256', $user->avatar) : asset('images/avatar-placeholder.svg') }}"
                                 alt="{{ $user->full_name }} avatar"
                                 width="56"
                                 height="56"
+                                loading="lazy"
+                                decoding="async"
                                 onerror="this.onerror=null;this.src='{{ asset('images/avatar-placeholder.svg') }}';"
                             >
                         </td>

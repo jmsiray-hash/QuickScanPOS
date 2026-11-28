@@ -110,7 +110,10 @@ class ProductController extends Controller
             404,
         );
 
-        return Storage::disk('public')->response($product->image_path);
+        return Storage::disk('public')->response($product->image_path, null, [
+            'Cache-Control' => 'public, max-age=31536000, immutable',
+            'ETag' => '"'.hash('sha256', $product->image_path).'"',
+        ]);
     }
 
     public function update(Request $request, Product $product): RedirectResponse

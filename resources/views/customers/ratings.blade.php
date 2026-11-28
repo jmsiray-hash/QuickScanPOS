@@ -13,16 +13,17 @@
     </header>
 
     <section class="ratings-summary" aria-label="Rating summary">
-        <article><span>Total ratings</span><strong>{{ number_format((int) $summary->rating_count) }}</strong></article>
-        <article><span>Average rating</span><strong>{{ $summary->average_rating === null ? '—' : number_format((float) $summary->average_rating, 1).'/5' }}</strong></article>
+        <article><span>Total ratings</span><strong id="ratings-count">{{ number_format((int) $summary->rating_count) }}</strong></article>
+        <article><span>Average rating</span><strong id="ratings-average">{{ $summary->average_rating === null ? '—' : number_format((float) $summary->average_rating, 1).'/5' }}</strong></article>
     </section>
+    <p id="ratings-refresh-status" class="ratings-refresh-status" role="status">Live feedback · refreshes automatically</p>
 
     <div class="table-wrap">
         <table class="ratings-table">
             <thead>
                 <tr><th>Rating</th><th>Customer</th><th>Feedback</th><th>Receipt</th><th>Submitted</th></tr>
             </thead>
-            <tbody>
+            <tbody id="ratings-list">
                 @forelse ($ratings as $cart)
                     <tr>
                         <td><span class="rating-value" aria-label="{{ $cart->service_rating }} out of 5 stars">{{ str_repeat('★', $cart->service_rating) }}<small>/5</small></span></td>
@@ -39,6 +40,57 @@
     </div>
     {{ $ratings->links() }}
 
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const list = document.getElementById('ratings-list');
+            const status = document.getElementById('ratings-refresh-status');
+            const pageUrl = new URL(window.location.href);
+            let refreshing = false;
+            const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
+            })[char]);
+
+            async function refreshRatings() {
+                if (refreshing || document.visibilityState !== 'visible') return;
+                refreshing = true;
+                try {
+                    const response = await fetch(pageUrl, {
+                        headers: { Accept: 'application/json' },
+                        cache: 'no-store',
+                    });
+                    if (!response.ok) throw new Error('Ratings refresh returned HTTP ' + response.status);
+                    const result = await response.json();
+                    document.getElementById('ratings-count').textContent = Number(result.rating_count).toLocaleString();
+                    document.getElementById('ratings-average').textContent = result.average_rating === null
+                        ? '—'
+                        : Number(result.average_rating).toFixed(1) + '/5';
+                    list.innerHTML = result.ratings.length
+                        ? result.ratings.map(rating => `
+                            <tr>
+                                <td><span class="rating-value" aria-label="${Number(rating.rating)} out of 5 stars">${'★'.repeat(Number(rating.rating))}<small>/5</small></span></td>
+                                <td><strong>${escapeHtml(rating.customer_name)}</strong><br><small>${Number(rating.items_count)} ${Number(rating.items_count) === 1 ? 'item' : 'items'}</small></td>
+                                <td>${escapeHtml(rating.feedback || 'No written feedback')}</td>
+                                <td>${rating.sale_id ? '#' + Number(rating.sale_id) : '—'}</td>
+                                <td>${escapeHtml(rating.submitted_at)}</td>
+                            </tr>
+                        `).join('')
+                        : '<tr><td colspan="5" class="ratings-empty">No customer ratings yet. Ratings submitted from paid Scan &amp; Go receipts will appear here.</td></tr>';
+                    status.textContent = 'Live feedback · updated just now';
+                } catch (error) {
+                    console.error('Could not refresh customer ratings.', error);
+                    status.textContent = 'Unable to refresh ratings. Retrying automatically.';
+                } finally {
+                    refreshing = false;
+                }
+            }
+
+            window.Echo?.private('pos-sync').listen('.pos.sync', event => {
+                if (event.resource === 'cart') refreshRatings();
+            });
+            window.setInterval(refreshRatings, window.Echo ? 30000 : 5000);
+        });
+    </script>
+
     <style>
         .ratings-heading { align-items:center; display:flex; gap:16px; justify-content:space-between; margin-bottom:22px; }
         .ratings-eyebrow { color:var(--brand); font-size:.68rem; font-weight:800; letter-spacing:.14em; margin:0 0 4px; }
@@ -48,6 +100,7 @@
         .ratings-summary article { background:var(--wash); border:1px solid #cce9df; border-radius:9px; display:grid; gap:3px; padding:13px 15px; }
         .ratings-summary span { color:var(--muted); font-size:.78rem; }
         .ratings-summary strong { color:var(--brand-dark); font-size:1.35rem; }
+        .ratings-refresh-status { color:var(--muted); font-size:.8rem; margin:-8px 0 12px; }
         .ratings-table { margin-top:0; }
         .ratings-table td { vertical-align:top; }
         .rating-value { color:#b7791f; font-size:1rem; letter-spacing:.04em; white-space:nowrap; }

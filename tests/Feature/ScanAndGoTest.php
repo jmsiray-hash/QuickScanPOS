@@ -288,14 +288,18 @@ class ScanAndGoTest extends TestCase
         Storage::disk('public')->assertExists($product->image_path);
         $this->get(route('products.image', $product))
             ->assertOk()
-            ->assertHeader('content-type', 'image/jpeg');
+            ->assertHeader('content-type', 'image/jpeg')
+            ->assertHeader('cache-control', 'immutable, max-age=31536000, public');
 
         $this->signInShopper('Photo Shopper');
         $this->post(route('shop.start'))->assertRedirect();
         $cart = CustomerCart::query()->where('customer_name', 'Photo Shopper')->firstOrFail();
         $this->postJson(route('shop.cart.scan', $cart->token), ['code' => $product->barcode])
             ->assertOk()
-            ->assertJsonPath('cart.items.0.image_url', route('products.image', $product));
+            ->assertJsonPath(
+                'cart.items.0.image_url',
+                route('products.image', $product).'?v='.hash('sha256', $product->image_path),
+            );
         $this->get(route('shop.cart', $cart->token))
             ->assertOk()
             ->assertSee('shop-product-image');
@@ -441,6 +445,14 @@ class ScanAndGoTest extends TestCase
             ->assertJsonPath('cart.service_rating', 5)
             ->assertJsonPath('cart.service_feedback', 'Great service');
 
+        $this->getJson(route('ratings.index'))
+            ->assertOk()
+            ->assertJsonPath('rating_count', 1)
+            ->assertJsonPath('average_rating', 5)
+            ->assertJsonPath('ratings.0.customer_name', 'Receipt Shopper')
+            ->assertJsonPath('ratings.0.feedback', 'Great service')
+            ->assertJsonPath('ratings.0.sale_id', $sale->id);
+
         $this->assertSame('Green Basket Market', StoreSetting::current()->store_name);
         $this->get(route('ratings.index'))
             ->assertOk()
@@ -468,6 +480,14 @@ class ScanAndGoTest extends TestCase
             ->assertSee('Rating Shopper')
             ->assertSee('Quick checkout')
             ->assertSee('4.0/5');
+
+        $this->getJson(route('ratings.index'))
+            ->assertOk()
+            ->assertJsonPath('rating_count', 1)
+            ->assertJsonPath('average_rating', 4)
+            ->assertJsonPath('ratings.0.customer_name', 'Rating Shopper')
+            ->assertJsonPath('ratings.0.feedback', 'Quick checkout')
+            ->assertJsonPath('ratings.0.items_count', 0);
     }
 
     public function test_admin_login_email_change_requires_password_and_sends_verification(): void
@@ -562,6 +582,64 @@ class ScanAndGoTest extends TestCase
             ->assertOk()
             ->assertJsonPath('cart.items.0.name', 'Test ACTIVITY-CART-1')
             ->assertJsonPath('cart.items.0.qty', 2);
+    }
+
+    public function test_customer_activity_separates_live_carts_from_history_and_shows_exact_item_quantities(): void
+    {
+        $product = $this->product('ACTIVITY-COUNT-1', 10, 4.00);
+        $secondProduct = $this->product('ACTIVITY-COUNT-2', 10, 5.00);
+        $liveCart = CustomerCart::create([
+            'token' => 'CART-LIVE-COUNT01',
+            'customer_name' => 'Live Shopper',
+            'status' => 'shopping',
+            'expires_at' => now()->addHour(),
+        ]);
+        CustomerCartItem::create([
+            'customer_cart_id' => $liveCart->id,
+            'product_id' => $product->id,
+            'qty' => 3,
+            'price' => 4,
+        ]);
+        $paidCart = CustomerCart::create([
+            'token' => 'CART-PAID-COUNT01',
+            'customer_name' => 'Paid Shopper',
+            'status' => 'paid',
+            'service_rating' => 5,
+            'rated_at' => now(),
+            'expires_at' => now()->addHour(),
+        ]);
+        CustomerCartItem::create([
+            'customer_cart_id' => $paidCart->id,
+            'product_id' => $product->id,
+            'qty' => 2,
+            'price' => 4,
+        ]);
+        CustomerCartItem::create([
+            'customer_cart_id' => $paidCart->id,
+            'product_id' => $secondProduct->id,
+            'qty' => 4,
+            'price' => 5,
+        ]);
+
+        $this->get(route('customer-activity.index'))
+            ->assertOk()
+            ->assertSee('Live customer activity')
+            ->assertSee('History')
+            ->assertSee('Live Shopper')
+            ->assertSee('>3</td>', false)
+            ->assertDontSee('Paid Shopper');
+
+        $this->get(route('customer-activity.index', ['view' => 'history']))
+            ->assertOk()
+            ->assertSee('Customer history')
+            ->assertSee('Paid Shopper')
+            ->assertSee('>6</td>', false)
+            ->assertDontSee('Live Shopper');
+
+        $paidCart->update(['status' => 'paid', 'service_rating' => null, 'rated_at' => null]);
+        $this->get(route('customer-activity.index'))
+            ->assertOk()
+            ->assertDontSee('Paid Shopper');
     }
 
     public function test_scanning_store_entry_registers_a_guest_visit_before_products_are_added(): void

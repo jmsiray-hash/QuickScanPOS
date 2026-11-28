@@ -4,7 +4,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
+    <meta name="reverb-key" content="{{ config('broadcasting.connections.reverb.key') }}">
+    <meta name="reverb-host" content="{{ config('broadcasting.connections.reverb.options.host') }}">
+    <meta name="reverb-port" content="{{ config('broadcasting.connections.reverb.options.port') }}">
+    <meta name="reverb-scheme" content="{{ config('broadcasting.connections.reverb.options.scheme') }}">
+    <meta name="authenticated" content="{{ auth()->check() ? 'true' : 'false' }}">
     <title>@yield('title', 'QuickScanPos')</title>
+    @if (auth()->check() || request()->routeIs('shop.cart', 'pos.verify'))
+        @vite('resources/js/app.js')
+    @endif
     <style>
         :root { --ink:#1f2937; --muted:#64748b; --brand:#0f766e; --brand-dark:#115e59; --line:#dbe5e3; --surface:#fff; --wash:#f0fdfa; }
         * { box-sizing:border-box; } body { background:#f1f5f2; color:var(--ink); font-family:Arial,sans-serif; line-height:1.6; margin:0; }
@@ -69,7 +77,6 @@
                     <a class="{{ request()->routeIs('dashboard') ? 'is-active' : '' }}" href="{{ route('dashboard') }}" @if (request()->routeIs('dashboard')) aria-current="page" @endif><span class="sidebar-nav-icon" aria-hidden="true">▤</span>Dashboard</a>
                     <a class="{{ request()->routeIs('cashier-dashboard', 'pos.index') ? 'is-active' : '' }}" href="{{ route('cashier-dashboard') }}" @if (request()->routeIs('cashier-dashboard', 'pos.index')) aria-current="page" @endif><span class="sidebar-nav-icon" aria-hidden="true">▣</span>QuickScan POS Register</a>
                     <a class="{{ request()->routeIs('sales.*') ? 'is-active' : '' }}" href="{{ route('sales.index') }}" @if (request()->routeIs('sales.*')) aria-current="page" @endif><span class="sidebar-nav-icon" aria-hidden="true">₱</span>Sales Reports</a>
-                    <a class="{{ request()->routeIs('customers.*') ? 'is-active' : '' }}" href="{{ route('customers.index') }}" @if (request()->routeIs('customers.*')) aria-current="page" @endif><span class="sidebar-nav-icon" aria-hidden="true">♙</span>Customers</a>
                     <a class="{{ request()->routeIs('customer-activity.*') ? 'is-active' : '' }}" href="{{ route('customer-activity.index') }}" @if (request()->routeIs('customer-activity.*')) aria-current="page" @endif><span class="sidebar-nav-icon" aria-hidden="true">◉</span>Scan &amp; Go Customers</a>
                     <a class="{{ request()->routeIs('ratings.*') ? 'is-active' : '' }}" href="{{ route('ratings.index') }}" @if (request()->routeIs('ratings.index')) aria-current="page" @endif><span class="sidebar-nav-icon" aria-hidden="true">★</span>Ratings</a>
                     @if (auth()->user()->isAdmin())

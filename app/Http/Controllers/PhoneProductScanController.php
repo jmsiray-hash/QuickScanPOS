@@ -154,7 +154,7 @@ class PhoneProductScanController extends Controller
                 'name' => $product->name,
                 'selling_price' => (float) $product->selling_price,
                 'stock_quantity' => $product->stock_quantity,
-                'image_url' => route('products.image', $product),
+                'image_url' => route('products.image', $product).'?v='.hash('sha256', $product->image_path),
             ],
         ], 201);
     }

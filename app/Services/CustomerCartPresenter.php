@@ -19,7 +19,7 @@ class CustomerCartPresenter
                 'code' => $product?->barcode ?? '',
                 'name' => $product?->name ?? 'Removed product',
                 'image_url' => $product?->image_path
-                    ? route('products.image', $product)
+                    ? route('products.image', $product).'?v='.hash('sha256', $product->image_path)
                     : null,
                 'qty' => $item->qty,
                 'checked_qty' => $item->checked_qty,

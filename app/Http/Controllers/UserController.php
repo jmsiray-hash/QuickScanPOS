@@ -95,7 +95,10 @@ class UserController extends Controller
             404,
         );
 
-        return Storage::disk('public')->response($user->avatar);
+        return Storage::disk('public')->response($user->avatar, null, [
+            'Cache-Control' => 'private, max-age=31536000, immutable',
+            'ETag' => '"'.hash('sha256', $user->avatar).'"',
+        ]);
     }
 
     public function edit(User $user): View

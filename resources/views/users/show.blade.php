@@ -12,7 +12,7 @@
     </div>
     <img
         class="avatar avatar-preview"
-        src="{{ $user->avatar ? route('users.avatar', $user) : asset('images/avatar-placeholder.svg') }}"
+        src="{{ $user->avatar ? route('users.avatar', $user).'?v='.hash('sha256', $user->avatar) : asset('images/avatar-placeholder.svg') }}"
         alt="{{ $user->full_name }} avatar"
         width="120"
         height="120"

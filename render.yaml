@@ -28,6 +28,22 @@ services:
         sync: false
       - key: MYSQL_ATTR_SSL_CA
         sync: false
+      - key: BROADCAST_CONNECTION
+        value: reverb
+      - key: REVERB_APP_ID
+        sync: false
+      - key: REVERB_APP_KEY
+        sync: false
+      - key: REVERB_APP_SECRET
+        sync: false
+      - key: REVERB_HOST
+        value: quickscanpos-reverb.onrender.com
+      - key: REVERB_PORT
+        value: "443"
+      - key: REVERB_SCHEME
+        value: https
+      - key: REVERB_ALLOWED_ORIGINS
+        value: quickscanpos.onrender.com
       - key: CACHE_STORE
         value: file
       - key: SESSION_DRIVER
@@ -36,3 +52,38 @@ services:
         value: true
       - key: SESSION_SAME_SITE
         value: lax
+  - type: web
+    name: quickscanpos-reverb
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: RUN_REVERB_SERVER
+        value: true
+      - key: APP_ENV
+        value: production
+      - key: APP_DEBUG
+        value: false
+      - key: APP_KEY
+        generateValue: true
+      - key: APP_URL
+        value: https://quickscanpos-reverb.onrender.com
+      - key: BROADCAST_CONNECTION
+        value: "null"
+      - key: REVERB_APP_ID
+        sync: false
+      - key: REVERB_APP_KEY
+        sync: false
+      - key: REVERB_APP_SECRET
+        sync: false
+      - key: REVERB_HOST
+        value: quickscanpos-reverb.onrender.com
+      - key: REVERB_PORT
+        value: "443"
+      - key: REVERB_SCHEME
+        value: https
+      - key: REVERB_SERVER_HOST
+        value: 0.0.0.0
+      - key: REVERB_SERVER_PORT
+        value: "10000"
+      - key: REVERB_ALLOWED_ORIGINS
+        value: quickscanpos.onrender.com

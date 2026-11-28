@@ -107,7 +107,8 @@
             document.addEventListener('pos:code-scanned', event => checkItem(event.detail.code));
             document.querySelector('.scanner-input').focus();
             render();
-            statusTimer = window.setInterval(async () => {
+            const refreshInterval = window.Echo ? 15000 : 1000;
+            const refreshWhenVisible = async () => {
                 if (document.visibilityState !== 'visible' || statusRefreshInProgress) return;
                 statusRefreshInProgress = true;
                 try {
@@ -119,7 +120,9 @@
                 } finally {
                     statusRefreshInProgress = false;
                 }
-            }, 1000);
+            };
+            window.Echo?.channel('cart.' + cart.token).listen('.pos.sync', refreshWhenVisible);
+            statusTimer = window.setInterval(refreshWhenVisible, refreshInterval);
             window.addEventListener('pagehide', () => {
                 if (statusTimer) window.clearInterval(statusTimer);
             });

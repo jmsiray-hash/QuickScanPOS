@@ -30,6 +30,8 @@ class PosPagesTest extends TestCase
             ->assertSee('images/quickscanpos-logo.png', false)
             ->assertSee(route('ratings.index'), false)
             ->assertSee('>Ratings</a>', false)
+            ->assertSee(route('customer-activity.index'), false)
+            ->assertDontSee('>Customers</a>', false)
             ->assertDontSee(
                 'href="'.route('cashier-dashboard').'" aria-current="page"',
                 false,

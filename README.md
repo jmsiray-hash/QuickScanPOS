@@ -104,6 +104,14 @@ The Docker entrypoint clears and rebuilds Laravel's configuration cache at conta
 
 At startup, the container checks the connected MySQL database's `migrations` table. If it exists without Laravel's `migration` column, the entrypoint runs `php artisan migrate:fresh --force`, which drops **all tables and data** in that configured database before rebuilding the schema. This one-time reset is limited to that incompatible schema; when the table is valid (or does not exist yet), startup uses `php artisan migrate --force` and preserves existing data.
 
+## Realtime sync and photo storage
+
+The Render web service uses the same MySQL database for shared application data and mounts a persistent disk at `storage/app/public` for user and product photos. Photos remain available across deploys; they are removed only when a photo is deliberately replaced or its record is deleted. Product and avatar image URLs are versioned and cached for one year so browsers can reuse them without showing an older replacement.
+
+Realtime notifications use Laravel Reverb. The `render.yaml` blueprint defines a `quickscanpos-reverb` web service alongside the main app. Set the same `REVERB_APP_ID`, `REVERB_APP_KEY`, and `REVERB_APP_SECRET` on both services. The main app uses `BROADCAST_CONNECTION=reverb`, `REVERB_HOST=quickscanpos-reverb.onrender.com`, `REVERB_PORT=443`, and `REVERB_SCHEME=https`; the Reverb service also needs `REVERB_ALLOWED_ORIGINS=quickscanpos.onrender.com`. Keep these credentials in Render environment settings, not in source control. The local `.env.example` defaults broadcasting to `null`; use `php artisan reverb:install` to generate local credentials and `php artisan reverb:start` to run a local WebSocket server.
+
+Connected customer carts, cashier verification, reports, and ratings update from WebSocket notifications. Their existing HTTP refreshes remain as a fallback if a WebSocket connection is unavailable.
+
 ## Storage Setup
 
 ```sh
